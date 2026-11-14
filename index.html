@@ -5,6 +5,13 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
 <meta http-equiv="Pragma" content="no-cache">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#0b6bcb">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Floor Tracker">
+<link rel="icon" type="image/png" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
 <title>Dyeing Floor Tracker</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
@@ -235,7 +242,7 @@ function renderAdmin(){
       : '<label class="chk"><input type="checkbox" id="aclr" checked> Clear previous data before starting</label><button class="btn go" id="astart">START positioning</button>')
    +'<div class="err" id="aerr"></div>'
    +sugHtml()
-   +'<button class="btn" id="alogout" style="margin-top:20px">Logout</button><div style="text-align:center;font-size:11px;color:var(--mut);margin-top:10px">page v12</div></div>';
+   +'<button class="btn" id="alogout" style="margin-top:20px">Logout</button><div style="text-align:center;font-size:11px;color:var(--mut);margin-top:10px">page v14</div></div>';
   $('adm').innerHTML=h;
   function guard(p){ $('aerr').textContent='Working…'; return p.then(function(j){apply(j)}).catch(function(e){
     if(/login required/i.test(e.message)){TOKEN='';sessionStorage.removeItem('dft_token');render()}
@@ -333,7 +340,8 @@ $('cfgsave').onclick=function(){
 $('cfgreset').onclick=function(){ try{ localStorage.removeItem('dft_api') }catch(e){} location.reload() };
 
 /* ---------- auto-update: reload when a newer page version is uploaded ---------- */
-var PAGE_VER='v12';
+var PAGE_VER='v14';
+if('serviceWorker' in navigator && location.protocol==='https:'){ window.addEventListener('load',function(){ navigator.serviceWorker.register('sw.js').catch(function(){}) }) }
 function checkUpdate(){
   if(cur!==null||busy||location.protocol==='file:') return;
   fetch(location.href.split('#')[0].split('?')[0]+'?_='+Date.now(),{cache:'no-store'})
