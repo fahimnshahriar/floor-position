@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html>
+<head>
+<base target="_top">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+:root{--bg:#f4f6f8;--card:#fff;--ink:#14202b;--mut:#66788a;--line:#d9e0e6;--acc:#0b6bcb;--idle:#eef1f4}
+@media (prefers-color-scheme:dark){:root{--bg:#10161c;--card:#19222b;--ink:#e8eef4;--mut:#93a4b4;--line:#2b3946;--acc:#4da3ff;--idle:#141c24}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+header{position:sticky;top:0;background:var(--bg);padding:12px 14px 8px;z-index:5;border-bottom:1px solid var(--line)}
+h1{font-size:18px;margin:0 0 8px}
+.tabs{display:flex;gap:8px}
+.tabs button{flex:1;padding:10px;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:10px;font-size:15px;font-weight:600}
+.tabs button.on{background:var(--acc);color:#fff;border-color:var(--acc)}
+#stat{font-size:13px;color:var(--mut);margin-top:6px}
+main{padding:12px 14px 40px;max-width:1100px;margin:auto}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px}
+.m{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px;text-align:left;color:var(--ink);font:inherit;min-height:122px;display:flex;flex-direction:column;gap:3px;cursor:pointer}
+.m.idle{background:var(--idle);color:var(--mut)}
+.top{display:flex;justify-content:space-between;align-items:baseline}
+.no{font-size:22px;font-weight:800}.cap{font-size:12px;color:var(--mut)}
+.buyer{font-weight:700;font-size:15px}.col{font-size:14px}
+.pos{margin-top:auto;font-size:13px;font-weight:700;color:#fff;background:var(--acc);border-radius:6px;padding:3px 7px;align-self:flex-start}
+.meta{font-size:11px;color:var(--mut)}
+#ov{position:fixed;inset:0;background:rgba(0,0,0,.5);display:none;align-items:flex-end;justify-content:center;z-index:20}
+#ov.show{display:flex}
+.sheet{background:var(--card);width:100%;max-width:520px;border-radius:16px 16px 0 0;padding:16px;max-height:92%;overflow:auto}
+@media(min-width:600px){#ov{align-items:center}.sheet{border-radius:16px}}
+.sheet h2{margin:0 0 10px;font-size:20px}
+label{display:block;font-size:13px;color:var(--mut);margin:10px 0 4px;font-weight:600}
+input{width:100%;padding:12px;font-size:16px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink)}
+.w{position:relative}
+.dd{position:absolute;left:0;right:0;top:100%;z-index:30;background:var(--card);border:1px solid var(--line);border-radius:10px;max-height:200px;overflow:auto;display:none;box-shadow:0 6px 18px rgba(0,0,0,.25)}
+.dd div{padding:10px 12px;border-bottom:1px solid var(--line);cursor:pointer}
+.dd div:hover{background:var(--idle)}
+.row{display:flex;gap:8px;margin-top:16px}
+.row button{flex:1;padding:13px;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--ink);font-size:16px;font-weight:700}
+.row .save{background:var(--acc);color:#fff;border-color:var(--acc);flex:2}
+.row .del{color:#c0392b}
+#err{color:#c0392b;font-size:13px;min-height:18px;margin-top:6px}
+</style>
+</head>
+<body>
+<header>
+  <h1>Dyeing Floor Tracker</h1>
+  <div class="tabs"><button id="t1" class="on">Unit 1</button><button id="t2">Unit 2</button></div>
+  <div id="stat">Loading…</div>
+</header>
+<main><div class="grid" id="grid"></div></main>
+
+<div id="ov"><div class="sheet">
+  <h2 id="mt"></h2>
+  <label>Buyer name</label>
+  <div class="w"><input id="buyer" autocomplete="off" placeholder="Start typing…"><div class="dd" id="ddb"></div></div>
+  <label>Color</label>
+  <input id="color" autocomplete="off">
+  <label>Load time</label>
+  <input id="load" type="datetime-local">
+  <label>Position</label>
+  <div class="w"><input id="pos" autocomplete="off" placeholder="Start typing… e.g. scou"><div class="dd" id="ddp"></div></div>
+  <div id="err"></div>
+  <div class="row"><button id="cancel">Cancel</button><button class="del" id="clear">Clear</button><button class="save" id="save">Save</button></div>
+</div></div>
+
+<script>
+var $ = function(i){return document.getElementById(i)};
+var CFG = null, data = {}, unit = 1, cur = null, busy = false;
+
+function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
+
+function render(){
+  if(!CFG) return;
+  var list = unit==1 ? CFG.u1 : CFG.u2, n = 0, h = '';
+  list.forEach(function(m){
+    var d = data[m], cap = CFG.cap[m];
+    if(d){ n++;
+      h += '<button class="m" data-n="'+m+'"><div class="top"><span class="no">'+m+'</span><span class="cap">'+cap+' kg</span></div>'
+        + '<div class="buyer">'+esc(d.buyer)+'</div><div class="col">'+esc(d.color)+'</div>'
+        + '<div class="pos">'+esc(d.pos||'—')+'</div><div class="meta">Loaded '+esc(d.loadTxt)+'</div></button>';
+    } else {
+      h += '<button class="m idle" data-n="'+m+'"><div class="top"><span class="no">'+m+'</span><span class="cap">'+cap+' kg</span></div>'
+        + '<div class="buyer">Idle</div><div class="meta">Tap to update</div></button>';
+    }
+  });
+  $('grid').innerHTML = h;
+  $('stat').textContent = n+' running · '+(list.length-n)+' idle';
+}
+
+$('grid').addEventListener('click', function(e){var b=e.target.closest('.m'); if(b) openSheet(+b.dataset.n)});
+$('t1').onclick = function(){unit=1;$('t1').className='on';$('t2').className='';render()};
+$('t2').onclick = function(){unit=2;$('t2').className='on';$('t1').className='';render()};
+
+function ac(input, dd, getItems){
+  function show(){
+    var q = input.value.trim().toLowerCase();
+    var m = getItems().filter(function(x){return !q || x.toLowerCase().indexOf(q)>-1}).slice(0,40);
+    dd.innerHTML = m.map(function(x){return '<div>'+esc(x)+'</div>'}).join('');
+    dd.style.display = m.length ? 'block' : 'none';
+  }
+  input.addEventListener('input', show); input.addEventListener('focus', show);
+  input.addEventListener('blur', function(){setTimeout(function(){dd.style.display='none'},180)});
+  dd.addEventListener('pointerdown', function(e){var t=e.target.closest('div'); if(t){e.preventDefault(); input.value=t.textContent; dd.style.display='none'}});
+}
+ac($('buyer'), $('ddb'), function(){return CFG?CFG.buyers:[]});
+ac($('pos'), $('ddp'), function(){return CFG?CFG.pos:[]});
+
+function nowLocal(){var d=new Date(); d.setMinutes(d.getMinutes()-d.getTimezoneOffset()); return d.toISOString().slice(0,16)}
+function openSheet(m){
+  cur = m; var d = data[m] || {};
+  $('mt').textContent = 'Machine '+m+' · '+CFG.cap[m]+' kg';
+  $('buyer').value = d.buyer||''; $('color').value = d.color||'';
+  $('load').value = d.load || nowLocal(); $('pos').value = d.pos||'';
+  $('err').textContent = ''; $('ov').classList.add('show');
+}
+function closeSheet(){$('ov').classList.remove('show'); cur = null}
+$('cancel').onclick = closeSheet;
+$('ov').addEventListener('pointerdown', function(e){if(e.target===$('ov')) closeSheet()});
+
+function done(res){busy=false; data=res; render(); closeSheet()}
+function fail(e){busy=false; $('err').textContent = (e && e.message) ? e.message.replace(/^Error:\s*/,'') : 'Failed. Try again.'}
+
+$('save').onclick = function(){
+  if(busy) return;
+  var buyer=$('buyer').value.trim(), pv=$('pos').value.trim();
+  if(!buyer){$('err').textContent='Enter the buyer name.'; return}
+  var ok = CFG.pos.filter(function(p){return p.toLowerCase()===pv.toLowerCase()})[0];
+  if(!ok){$('err').textContent='Pick a position from the list.'; return}
+  busy = true; $('err').textContent = 'Saving…';
+  google.script.run.withSuccessHandler(done).withFailureHandler(fail)
+    .saveMachine(cur, buyer, $('color').value, $('load').value, ok);
+};
+$('clear').onclick = function(){
+  if(busy) return; busy = true; $('err').textContent = 'Clearing…';
+  google.script.run.withSuccessHandler(done).withFailureHandler(fail).clearMachine(cur);
+};
+
+// initial load + auto refresh every 20s (not while a form is open)
+google.script.run.withSuccessHandler(function(b){CFG=b; data=b.data; render()})
+  .withFailureHandler(function(){$('stat').textContent='Could not load data'}).getBoot();
+setInterval(function(){
+  if(!CFG || cur!==null || busy) return;
+  google.script.run.withSuccessHandler(function(d){if(cur===null){data=d; render()}}).getData();
+}, 20000);
+</script>
+</body>
+</html>
