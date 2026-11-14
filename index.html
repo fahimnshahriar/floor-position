@@ -3,6 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
 <title>Dyeing Floor Tracker</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
@@ -217,7 +219,7 @@ function renderAdmin(){
       : '<label class="chk"><input type="checkbox" id="aclr" checked> Clear previous data before starting</label><button class="btn go" id="astart">START positioning</button>')
    +'<div class="err" id="aerr"></div>'
    +sugHtml()
-   +'<button class="btn" id="alogout" style="margin-top:20px">Logout</button><div style="text-align:center;font-size:11px;color:var(--mut);margin-top:10px">page v7</div></div>';
+   +'<button class="btn" id="alogout" style="margin-top:20px">Logout</button><div style="text-align:center;font-size:11px;color:var(--mut);margin-top:10px">page v9</div></div>';
   $('adm').innerHTML=h;
   function guard(p){ $('aerr').textContent='Working…'; return p.then(function(j){apply(j)}).catch(function(e){
     if(/login required/i.test(e.message)){TOKEN='';sessionStorage.removeItem('dft_token');render()}
@@ -285,6 +287,18 @@ $('cfgsave').onclick=function(){
   location.reload();
 };
 $('cfgreset').onclick=function(){ try{ localStorage.removeItem('dft_api') }catch(e){} location.reload() };
+
+/* ---------- auto-update: reload when a newer page version is uploaded ---------- */
+var PAGE_VER='v9';
+function checkUpdate(){
+  if(cur!==null||busy||location.protocol==='file:') return;
+  fetch(location.href.split('#')[0].split('?')[0]+'?_='+Date.now(),{cache:'no-store'})
+    .then(function(r){return r.text()})
+    .then(function(t){ var m=t.match(/var PAGE_VER='([^']+)'/); if(m&&m[1]!==PAGE_VER) location.reload(); })
+    .catch(function(){});
+}
+setInterval(checkUpdate,60000);
+document.addEventListener('visibilitychange',function(){ if(!document.hidden) checkUpdate() });
 
 /* ---------- start ---------- */
 api('boot').then(function(j){CFG=j.cfg; apply(j)}).catch(function(e){$('banner').className='closed'; $('banner').textContent='Cannot reach server: '+e.message+' (tap the gear to check the script link)'});
