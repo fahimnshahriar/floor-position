@@ -50,7 +50,7 @@ input{width:100%;padding:12px;font-size:16px;border:1px solid var(--line);border
 </head>
 <body>
 <header>
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;gap:8px"><h1 style="margin:0">Dyeing Floor Tracker</h1><div style="display:flex;gap:6px"><button id="expimg" style="padding:8px 12px;border-radius:10px;border:1px solid var(--acc);background:var(--card);color:var(--acc);font-weight:700;font-size:14px">Image</button><button id="expxls" style="padding:8px 12px;border-radius:10px;border:1px solid var(--acc);background:var(--acc);color:#fff;font-weight:700;font-size:14px">Excel</button></div></div>
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;gap:8px"><h1 style="margin:0">Dyeing Floor Tracker</h1><div style="display:flex;gap:6px"><button id="expimg" style="padding:8px 12px;border-radius:10px;border:1px solid var(--acc);background:var(--card);color:var(--acc);font-weight:700;font-size:14px">Image</button><button id="cfg" title="Script link" style="padding:8px 10px;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--ink);font-size:16px">⚙</button><button id="expxls" style="padding:8px 12px;border-radius:10px;border:1px solid var(--acc);background:var(--acc);color:#fff;font-weight:700;font-size:14px">Excel</button></div></div>
   <div class="tabs"><button id="t1" class="on">Unit 1</button><button id="t2">Unit 2</button><button id="t3">Admin</button></div>
   <div id="banner" class="closed">Connecting…</div>
   <div id="stat"></div>
@@ -69,9 +69,20 @@ input{width:100%;padding:12px;font-size:16px;border:1px solid var(--line);border
   <div class="row"><button id="cancel">Cancel</button><button class="del" id="clear">Clear</button><button class="save" id="save">Save</button></div>
 </div></div>
 
+<div id="cfgov" style="position:fixed;inset:0;background:rgba(0,0,0,.5);display:none;align-items:center;justify-content:center;z-index:50;padding:12px">
+  <div class="sheet" style="border-radius:16px">
+    <h2>Script link</h2>
+    <label>Paste the Apps Script Web app URL (ends with /exec)</label>
+    <input id="cfgurl" autocomplete="off" placeholder="https://script.google.com/macros/s/.../exec">
+    <div class="err" id="cfgerr"></div>
+    <div style="font-size:12px;color:var(--mut)">Saved on this device. You only need to change it if you create a new deployment.</div>
+    <div class="row"><button id="cfgx">Cancel</button><button id="cfgreset">Default</button><button class="save" id="cfgsave">Save</button></div>
+  </div>
+</div>
 <script>
 /* ====== PASTE YOUR APPS SCRIPT WEB APP URL HERE (ends with /exec) ====== */
-var API_URL = 'https://script.google.com/macros/s/AKfycbwSLVauvSIP6sBVZfb669a0DXoqlp-t8FqSyRYbXMK31_WOu_LzMNrc-uAA_l2pPehi/exec';
+var DEFAULT_URL = 'https://script.google.com/macros/s/AKfycbwLV6w_WIztFh44UpxjInpLc_eF0WORVcsVCuyPQwwO3paBYMq15nFCYeWo3eiMZiS_/exec';
+var API_URL = (function(){ try{ return localStorage.getItem('dft_api') || DEFAULT_URL }catch(e){ return DEFAULT_URL } })();
 /* ======================================================================= */
 
 var $ = function(i){return document.getElementById(i)};
@@ -172,7 +183,7 @@ function renderAdmin(){
       ? '<button class="btn stop" id="astop">STOP positioning</button>'
       : '<label class="chk"><input type="checkbox" id="aclr" checked> Clear previous data before starting</label><button class="btn go" id="astart">START positioning</button>')
    +'<div class="err" id="aerr"></div>'
-   +'<button class="btn" id="alogout" style="margin-top:20px">Logout</button><div style="text-align:center;font-size:11px;color:var(--mut);margin-top:10px">page v4</div></div>';
+   +'<button class="btn" id="alogout" style="margin-top:20px">Logout</button><div style="text-align:center;font-size:11px;color:var(--mut);margin-top:10px">page v5</div></div>';
   $('adm').innerHTML=h;
   function guard(p){ $('aerr').textContent='Working…'; return p.then(function(j){apply(j)}).catch(function(e){
     if(/login required/i.test(e.message)){TOKEN='';sessionStorage.removeItem('dft_token');render()}
@@ -220,8 +231,18 @@ function exportExcel(){
 $('expimg').onclick=function(){ if(CFG) exportImage() };
 $('expxls').onclick=function(){ if(CFG) exportExcel() };
 
+$('cfg').onclick=function(){ $('cfgurl').value=API_URL; $('cfgerr').textContent=''; $('cfgov').style.display='flex' };
+$('cfgx').onclick=function(){ $('cfgov').style.display='none' };
+$('cfgsave').onclick=function(){
+  var u=$('cfgurl').value.trim();
+  if(!/^https:\/\/script\.google\.com\/macros\/s\/[^\/\s]+\/exec$/.test(u)){ $('cfgerr').textContent='Paste the full link that ends with /exec'; return }
+  try{ localStorage.setItem('dft_api',u) }catch(e){}
+  location.reload();
+};
+$('cfgreset').onclick=function(){ try{ localStorage.removeItem('dft_api') }catch(e){} location.reload() };
+
 /* ---------- start ---------- */
-api('boot').then(function(j){CFG=j.cfg; apply(j)}).catch(function(e){$('banner').className='closed'; $('banner').textContent='Cannot reach server: '+e.message});
+api('boot').then(function(j){CFG=j.cfg; apply(j)}).catch(function(e){$('banner').className='closed'; $('banner').textContent='Cannot reach server: '+e.message+' (tap the gear to check the script link)'});
 setInterval(function(){ if(!CFG||cur!==null||busy) return; api('data').then(apply).catch(function(){}) },15000);
 </script>
 </body>
