@@ -67,7 +67,7 @@ input{width:100%;padding:12px;font-size:16px;border:1px solid var(--line);border
   <label>Buyer name</label>
   <div class="w"><input id="buyer" autocomplete="off" placeholder="Start typing…"><div class="dd" id="ddb"></div></div>
   <label>Color</label><input id="color" autocomplete="off">
-  <label>Load time</label><input id="load" type="datetime-local">
+  <label>Load time</label><input id="load" type="time">
   <label>Position</label>
   <div class="w"><input id="pos" autocomplete="off" placeholder="Start typing… e.g. scou"><div class="dd" id="ddp"></div></div>
   <div class="err" id="err"></div>
@@ -92,13 +92,20 @@ var API_URL = (function(){ try{ return localStorage.getItem('dft_api') || DEFAUL
 
 var $ = function(i){return document.getElementById(i)};
 var admSig='', CFG=null, data={}, ST={open:false}, tab=1, cur=null, busy=false;
-var TOKEN = sessionStorage.getItem('dft_token') || '';
+var TOKEN = (function(){ try{ return sessionStorage.getItem('dft_token') || '' }catch(e){ return '' } })();
 
+/* show load time only (no date) */
+function fmtT(d){
+  if(!d) return '';
+  var m=/T(\d\d):(\d\d)/.exec(d.load||'');
+  if(m){ var h=+m[1]; return (h%12||12)+':'+m[2]+' '+(h>=12?'PM':'AM') }
+  return fmtT(d);
+}
 function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
 function api(action, extra){
   var ctl=new AbortController(), tmo=setTimeout(function(){ctl.abort()},30000);
   return fetch(API_URL,{method:'POST',signal:ctl.signal,body:JSON.stringify(Object.assign({action:action,token:TOKEN},extra||{}))})
-    .then(function(r){clearTimeout(tmo); return r.json()},function(e){clearTimeout(tmo); throw new Error(e.name==='AbortError'?'Server took too long. Try again.':'Network error. Check internet.')})
+    .then(function(r){clearTimeout(tmo); return r.json().catch(function(){throw new Error('Bad reply from server. Try again.')})},function(e){clearTimeout(tmo); throw new Error(e.name==='AbortError'?'Server took too long. Try again.':'Network error. Check internet.')})
     .then(function(j){ if(!j.ok) throw new Error(j.error||'Error'); return j; });
 }
 function tm(ms){return ms?new Date(ms).toLocaleString([], {day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}):''}
@@ -118,7 +125,7 @@ function render(){
   list.forEach(function(m){
     var d=data[m], cap=CFG.cap[m];
     if(d){ n++;
-      h+='<button class="m" data-n="'+m+'"><div class="top"><span class="no">'+m+'</span><span class="cap">'+cap+' kg</span></div><div class="buyer">'+esc(d.buyer)+'</div><div class="col">'+esc(d.color)+'</div><div class="pos">'+esc(d.pos||'—')+'</div><div class="meta">Loaded '+esc(d.loadTxt)+'</div></button>';
+      h+='<button class="m" data-n="'+m+'"><div class="top"><span class="no">'+m+'</span><span class="cap">'+cap+' kg</span></div><div class="buyer">'+esc(d.buyer)+'</div><div class="col">'+esc(d.color)+'</div><div class="pos">'+esc(d.pos||'—')+'</div><div class="meta">Loaded '+esc(fmtT(d))+'</div></button>';
     } else {
       h+='<button class="m idle" data-n="'+m+'"><div class="top"><span class="no">'+m+'</span><span class="cap">'+cap+' kg</span></div><div class="buyer">Idle</div><div class="meta">'+(ST.open?'Tap to update':'')+'</div></button>';
     }
@@ -168,10 +175,19 @@ function merged(k){ var base=CFG?CFG[k]:[]; return base.concat((getSug()[k]||[])
 ac($('buyer'),$('ddb'),function(){return merged('buyers')});
 ac($('pos'),$('ddp'),function(){return merged('pos')});
 function nowLocal(){var d=new Date(); d.setMinutes(d.getMinutes()-d.getTimezoneOffset()); return d.toISOString().slice(0,16)}
+function nowTime(){return nowLocal().slice(11,16)}
+/* time typed by operator -> full local date-time string the server expects (date is automatic) */
+function loadIso(t){
+  var now=new Date(), p=function(x){return String(x).padStart(2,'0')};
+  var hm=/^(\d\d):(\d\d)$/.exec(t||''); if(!hm) hm=/^(\d\d):(\d\d)$/.exec(nowTime());
+  var d=new Date(now.getFullYear(),now.getMonth(),now.getDate(),+hm[1],+hm[2]);
+  if(d-now>3600000) d.setDate(d.getDate()-1); /* time later than now = it was yesterday (night shift) */
+  return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+'T'+p(d.getHours())+':'+p(d.getMinutes());
+}
 function openSheet(m){
   cur=m; var d=data[m]||{};
   $('mt').textContent='Machine '+m+' · '+CFG.cap[m]+' kg';
-  $('buyer').value=d.buyer||''; $('color').value=d.color||''; $('load').value=d.load||nowLocal(); $('pos').value=d.pos||'';
+  $('buyer').value=d.buyer||''; $('color').value=d.color||''; $('load').value=(d.load&&/T\d\d:\d\d/.test(d.load)?d.load.slice(11,16):nowTime()); $('pos').value=d.pos||'';
   $('err').textContent=''; $('ov').classList.add('show');
 }
 function closeSheet(){$('ov').classList.remove('show'); cur=null}
@@ -186,9 +202,9 @@ $('save').onclick=function(){
   if(!buyer){$('err').textContent='Enter the buyer name.';return}
   if(!ok){$('err').textContent='Enter the position.';return}
   busy=true; $('err').textContent='Saving…';
-  api('save',{mc:cur,buyer:buyer,color:$('color').value,load:$('load').value,pos:ok}).then(fin).catch(fail);
+  api('save',{mc:cur,buyer:buyer,color:$('color').value.trim(),load:loadIso($('load').value),pos:ok}).then(fin).catch(fail);
 };
-$('clear').onclick=function(){ if(busy) return; busy=true; $('err').textContent='Clearing…'; api('clear',{mc:cur}).then(fin).catch(fail) };
+$('clear').onclick=function(){ if(busy) return; if(!confirm('Clear machine '+cur+'?')) return; busy=true; $('err').textContent='Clearing…'; api('clear',{mc:cur}).then(fin).catch(fail) };
 
 /* ---------- admin ---------- */
 function sugHtml(){
@@ -219,7 +235,7 @@ function renderAdmin(){
       : '<label class="chk"><input type="checkbox" id="aclr" checked> Clear previous data before starting</label><button class="btn go" id="astart">START positioning</button>')
    +'<div class="err" id="aerr"></div>'
    +sugHtml()
-   +'<button class="btn" id="alogout" style="margin-top:20px">Logout</button><div style="text-align:center;font-size:11px;color:var(--mut);margin-top:10px">page v9</div></div>';
+   +'<button class="btn" id="alogout" style="margin-top:20px">Logout</button><div style="text-align:center;font-size:11px;color:var(--mut);margin-top:10px">page v10</div></div>';
   $('adm').innerHTML=h;
   function guard(p){ $('aerr').textContent='Working…'; return p.then(function(j){apply(j)}).catch(function(e){
     if(/login required/i.test(e.message)){TOKEN='';sessionStorage.removeItem('dft_token');render()}
@@ -263,13 +279,13 @@ function exportImage(){
   cell(0,RH,W[0]+W[1],'DATE',true); cell(W[0]+W[1],RH,W[2],s.d); cell(W[0]+W[1]+W[2],RH,W[3],'');
   cell(W[0]+W[1]+W[2]+W[3],RH,W[4],'TIME',true); cell(T-W[5],RH,W[5],s.t);
   line(RH*2,['MC','CAPACITY','BUYER','COLOR','LOAD TIME','POSITION'],true);
-  rows.forEach(function(n,i){var d=data[n]||{}; line(RH*(3+i),[n,CFG.cap[n],d.buyer||'',d.color||'',d.loadTxt||'',d.pos||''],false)});
+  rows.forEach(function(n,i){var d=data[n]||{}; line(RH*(3+i),[n,CFG.cap[n],d.buyer||'',d.color||'',fmtT(d),d.pos||''],false)});
   cv.toBlob(function(b){var a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download='floor-position-'+s.f+'.png'; document.body.appendChild(a); a.click(); a.remove()},'image/png');
 }
 function exportExcel(){
   if(!window.XLSX){alert('Excel library did not load.');return}
   var s=stamp(), r=[['FLOOR POSITION'],['DATE','',s.d,'','TIME',s.t],['MC','CAPACITY','BUYER','COLOR','LOAD TIME','POSITION']];
-  allRows().forEach(function(n){var d=data[n]||{}; r.push([n,CFG.cap[n],d.buyer||'',d.color||'',d.loadTxt||'',d.pos||''])});
+  allRows().forEach(function(n){var d=data[n]||{}; r.push([n,CFG.cap[n],d.buyer||'',d.color||'',fmtT(d),d.pos||''])});
   var ws=XLSX.utils.aoa_to_sheet(r); ws['!merges']=[{s:{r:0,c:0},e:{r:0,c:5}},{s:{r:1,c:0},e:{r:1,c:1}}];
   ws['!cols']=[{wch:7},{wch:10},{wch:22},{wch:18},{wch:16},{wch:24}];
   var wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Floor Position'); XLSX.writeFile(wb,'floor-position-'+s.f+'.xlsx');
@@ -289,7 +305,7 @@ $('cfgsave').onclick=function(){
 $('cfgreset').onclick=function(){ try{ localStorage.removeItem('dft_api') }catch(e){} location.reload() };
 
 /* ---------- auto-update: reload when a newer page version is uploaded ---------- */
-var PAGE_VER='v9';
+var PAGE_VER='v10';
 function checkUpdate(){
   if(cur!==null||busy||location.protocol==='file:') return;
   fetch(location.href.split('#')[0].split('?')[0]+'?_='+Date.now(),{cache:'no-store'})
@@ -301,8 +317,14 @@ setInterval(checkUpdate,60000);
 document.addEventListener('visibilitychange',function(){ if(!document.hidden) checkUpdate() });
 
 /* ---------- start ---------- */
-api('boot').then(function(j){CFG=j.cfg; apply(j)}).catch(function(e){$('banner').className='closed'; $('banner').textContent='Cannot reach server: '+e.message+' (tap the gear to check the script link)'});
-setInterval(function(){ if(!CFG||cur!==null||busy) return; api('data').then(apply).catch(function(){}) },15000);
+function boot(){
+  api('boot').then(function(j){CFG=j.cfg; apply(j)}).catch(function(e){
+    $('banner').className='closed'; $('banner').textContent='Cannot reach server: '+e.message+' (retrying… tap the gear to check the script link)';
+    setTimeout(boot,8000);
+  });
+}
+boot();
+setInterval(function(){ if(!CFG||cur!==null||busy||document.hidden) return; api('data').then(apply).catch(function(){}) },15000);
 </script>
 </body>
 </html>
