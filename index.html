@@ -46,6 +46,9 @@ input{width:100%;padding:12px;font-size:16px;border:1px solid var(--line);border
 .row button{flex:1;padding:13px;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--ink);font-size:16px;font-weight:700}
 .row .save{background:var(--acc);color:#fff;border-color:var(--acc);flex:2}.row .del{color:var(--bad)}
 .err{color:var(--bad);font-size:13px;min-height:18px;margin-top:6px}
+.sheet{position:relative}
+#ov.kb{align-items:flex-start}
+#ov.kb .sheet{border-radius:0 0 16px 16px;max-height:100%;padding-bottom:60vh}
 </style>
 </head>
 <body>
@@ -130,12 +133,29 @@ $('grid').addEventListener('click',function(e){
   openSheet(+b.dataset.n);
 });
 
+/* ---------- keep the field + suggestions above the phone keyboard ---------- */
+function fitVV(){ var v=window.visualViewport; if(!v) return; var o=$('ov'); o.style.top=v.offsetTop+'px'; o.style.height=v.height+'px'; o.style.bottom='auto'; }
+if(window.visualViewport){ visualViewport.addEventListener('resize',fitVV); visualViewport.addEventListener('scroll',fitVV); }
+$('ov').addEventListener('focusin',function(e){
+  var el=e.target; if(el.tagName!=='INPUT'||innerWidth>=600) return;
+  $('ov').classList.add('kb'); fitVV();
+  setTimeout(function(){ fitVV(); var w=el.parentNode.classList.contains('w')?el.parentNode:el;
+    $('ov').querySelector('.sheet').scrollTop=Math.max(0,w.offsetTop-34); },350);
+});
+$('ov').addEventListener('focusout',function(){
+  setTimeout(function(){ var a=document.activeElement; if(!a||a.tagName!=='INPUT') $('ov').classList.remove('kb') },250);
+});
+
 /* ---------- operator form ---------- */
 function ac(input,dd,get){
   function show(){var q=input.value.trim().toLowerCase();
     var m=get().filter(function(x){return !q||x.toLowerCase().indexOf(q)>-1}).slice(0,40);
     dd.innerHTML=m.map(function(x){return'<div>'+esc(x)+'</div>'}).join(''); dd.style.display=m.length?'block':'none'}
-  input.addEventListener('input',show); input.addEventListener('focus',show);
+  function fit(){var v=window.visualViewport,vh=v?v.height:innerHeight,top=v?v.offsetTop:0;
+    var r=input.getBoundingClientRect(); dd.style.maxHeight=Math.max(150,Math.floor(top+vh-r.bottom-14))+'px'}
+  var _show=show; show=function(){_show(); fit()};
+  input.addEventListener('input',show);
+  input.addEventListener('focus',function(){show(); setTimeout(show,400)});
   input.addEventListener('blur',function(){setTimeout(function(){dd.style.display='none'},180)});
   dd.addEventListener('pointerdown',function(e){var t=e.target.closest('div'); if(t){e.preventDefault(); input.value=t.textContent; dd.style.display='none'}});
 }
@@ -183,7 +203,7 @@ function renderAdmin(){
       ? '<button class="btn stop" id="astop">STOP positioning</button>'
       : '<label class="chk"><input type="checkbox" id="aclr" checked> Clear previous data before starting</label><button class="btn go" id="astart">START positioning</button>')
    +'<div class="err" id="aerr"></div>'
-   +'<button class="btn" id="alogout" style="margin-top:20px">Logout</button><div style="text-align:center;font-size:11px;color:var(--mut);margin-top:10px">page v6</div></div>';
+   +'<button class="btn" id="alogout" style="margin-top:20px">Logout</button><div style="text-align:center;font-size:11px;color:var(--mut);margin-top:10px">page v7</div></div>';
   $('adm').innerHTML=h;
   function guard(p){ $('aerr').textContent='Working…'; return p.then(function(j){apply(j)}).catch(function(e){
     if(/login required/i.test(e.message)){TOKEN='';sessionStorage.removeItem('dft_token');render()}
