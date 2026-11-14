@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Dyeing Floor Tracker</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+:root{--bg:#f4f6f8;--card:#fff;--ink:#14202b;--mut:#66788a;--line:#d9e0e6;--acc:#0b6bcb;--idle:#eef1f4;--ok:#1b8a4b;--bad:#c0392b}
+@media (prefers-color-scheme:dark){:root{--bg:#10161c;--card:#19222b;--ink:#e8eef4;--mut:#93a4b4;--line:#2b3946;--acc:#4da3ff;--idle:#141c24;--ok:#4cc27c;--bad:#ff6b5b}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+header{position:sticky;top:0;background:var(--bg);padding:12px 14px 8px;z-index:5;border-bottom:1px solid var(--line)}
+h1{font-size:18px;margin:0 0 8px}
+.tabs{display:flex;gap:8px}
+.tabs button{flex:1;padding:10px;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:10px;font-size:15px;font-weight:600}
+.tabs button.on{background:var(--acc);color:#fff;border-color:var(--acc)}
+#banner{margin-top:8px;padding:8px 10px;border-radius:8px;font-size:14px;font-weight:700;color:#fff}
+#banner.open{background:var(--ok)}#banner.closed{background:var(--bad)}
+#stat{font-size:13px;color:var(--mut);margin-top:6px}
+main{padding:12px 14px 40px;max-width:1100px;margin:auto}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px}
+.m{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px;text-align:left;color:var(--ink);font:inherit;min-height:122px;display:flex;flex-direction:column;gap:3px;cursor:pointer}
+.m.idle{background:var(--idle);color:var(--mut)}
+.top{display:flex;justify-content:space-between;align-items:baseline}
+.no{font-size:22px;font-weight:800}.cap{font-size:12px;color:var(--mut)}
+.buyer{font-weight:700;font-size:15px}.col{font-size:14px}
+.pos{margin-top:auto;font-size:13px;font-weight:700;color:#fff;background:var(--acc);border-radius:6px;padding:3px 7px;align-self:flex-start}
+.meta{font-size:11px;color:var(--mut)}
+.panel{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px;max-width:460px;margin:auto}
+.panel h2{margin:0 0 10px;font-size:18px}
+.btn{width:100%;padding:13px;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--ink);font-size:16px;font-weight:700;margin-top:10px}
+.btn.go{background:var(--ok);color:#fff;border-color:var(--ok)}.btn.stop{background:var(--bad);color:#fff;border-color:var(--bad)}.btn.pri{background:var(--acc);color:#fff;border-color:var(--acc)}
+.chk{display:flex;gap:8px;align-items:center;margin-top:10px;font-size:14px}.chk input{width:auto}
+#ov{position:fixed;inset:0;background:rgba(0,0,0,.5);display:none;align-items:flex-end;justify-content:center;z-index:20}
+#ov.show{display:flex}
+.sheet{background:var(--card);width:100%;max-width:520px;border-radius:16px 16px 0 0;padding:16px;max-height:92%;overflow:auto}
+@media(min-width:600px){#ov{align-items:center}.sheet{border-radius:16px}}
+.sheet h2{margin:0 0 10px;font-size:20px}
+label{display:block;font-size:13px;color:var(--mut);margin:10px 0 4px;font-weight:600}
+input{width:100%;padding:12px;font-size:16px;border:1px solid var(--line);border-radius:10px;background:var(--bg);color:var(--ink)}
+.w{position:relative}
+.dd{position:absolute;left:0;right:0;top:100%;z-index:30;background:var(--card);border:1px solid var(--line);border-radius:10px;max-height:200px;overflow:auto;display:none;box-shadow:0 6px 18px rgba(0,0,0,.25)}
+.dd div{padding:10px 12px;border-bottom:1px solid var(--line);cursor:pointer}
+.row{display:flex;gap:8px;margin-top:16px}
+.row button{flex:1;padding:13px;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--ink);font-size:16px;font-weight:700}
+.row .save{background:var(--acc);color:#fff;border-color:var(--acc);flex:2}.row .del{color:var(--bad)}
+.err{color:var(--bad);font-size:13px;min-height:18px;margin-top:6px}
+</style>
+</head>
+<body>
+<header>
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;gap:8px"><h1 style="margin:0">Dyeing Floor Tracker</h1><div style="display:flex;gap:6px"><button id="expimg" style="padding:8px 12px;border-radius:10px;border:1px solid var(--acc);background:var(--card);color:var(--acc);font-weight:700;font-size:14px">Image</button><button id="expxls" style="padding:8px 12px;border-radius:10px;border:1px solid var(--acc);background:var(--acc);color:#fff;font-weight:700;font-size:14px">Excel</button></div></div>
+  <div class="tabs"><button id="t1" class="on">Unit 1</button><button id="t2">Unit 2</button><button id="t3">Admin</button></div>
+  <div id="banner" class="closed">Connecting…</div>
+  <div id="stat"></div>
+</header>
+<main><div class="grid" id="grid"></div><div id="adm" style="display:none"></div></main>
+
+<div id="ov"><div class="sheet">
+  <h2 id="mt"></h2>
+  <label>Buyer name</label>
+  <div class="w"><input id="buyer" autocomplete="off" placeholder="Start typing…"><div class="dd" id="ddb"></div></div>
+  <label>Color</label><input id="color" autocomplete="off">
+  <label>Load time</label><input id="load" type="datetime-local">
+  <label>Position</label>
+  <div class="w"><input id="pos" autocomplete="off" placeholder="Start typing… e.g. scou"><div class="dd" id="ddp"></div></div>
+  <div class="err" id="err"></div>
+  <div class="row"><button id="cancel">Cancel</button><button class="del" id="clear">Clear</button><button class="save" id="save">Save</button></div>
+</div></div>
+
+<script>
+/* ====== PASTE YOUR APPS SCRIPT WEB APP URL HERE (ends with /exec) ====== */
+var API_URL = 'https://script.google.com/macros/s/AKfycbwSLVauvSIP6sBVZfb669a0DXoqlp-t8FqSyRYbXMK31_WOu_LzMNrc-uAA_l2pPehi/exec';
+/* ======================================================================= */
+
+var $ = function(i){return document.getElementById(i)};
+var CFG=null, data={}, status={open:false}, tab=1, cur=null, busy=false;
+var TOKEN = sessionStorage.getItem('dft_token') || '';
+
+function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
+function api(action, extra){
+  return fetch(API_URL,{method:'POST',body:JSON.stringify(Object.assign({action:action,token:TOKEN},extra||{}))})
+    .then(function(r){return r.json()})
+    .then(function(j){ if(!j.ok) throw new Error(j.error||'Error'); return j; });
+}
+function tm(ms){return ms?new Date(ms).toLocaleString([], {day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}):''}
+function apply(j){ if(j.status) status=j.status; if(j.data) data=j.data; render(); }
+
+function render(){
+  var b=$('banner');
+  if(status.open){b.className='open'; b.textContent='POSITIONING OPEN · started '+tm(status.startedAt)}
+  else {b.className='closed'; b.textContent='POSITIONING CLOSED'+(status.stoppedAt?' · stopped '+tm(status.stoppedAt):'')+' – view only'}
+  ['t1','t2','t3'].forEach(function(id,i){$(id).className=(tab==i+1)?'on':''});
+  var isAdm = tab==3;
+  $('grid').style.display = isAdm?'none':'grid';
+  $('adm').style.display = isAdm?'block':'none';
+  if(isAdm){ $('stat').textContent=''; renderAdmin(); return }
+  if(!CFG) return;
+  var list = tab==1?CFG.u1:CFG.u2, n=0, h='';
+  list.forEach(function(m){
+    var d=data[m], cap=CFG.cap[m];
+    if(d){ n++;
+      h+='<button class="m" data-n="'+m+'"><div class="top"><span class="no">'+m+'</span><span class="cap">'+cap+' kg</span></div><div class="buyer">'+esc(d.buyer)+'</div><div class="col">'+esc(d.color)+'</div><div class="pos">'+esc(d.pos||'—')+'</div><div class="meta">Loaded '+esc(d.loadTxt)+'</div></button>';
+    } else {
+      h+='<button class="m idle" data-n="'+m+'"><div class="top"><span class="no">'+m+'</span><span class="cap">'+cap+' kg</span></div><div class="buyer">Idle</div><div class="meta">'+(status.open?'Tap to update':'')+'</div></button>';
+    }
+  });
+  $('grid').innerHTML=h;
+  $('stat').textContent=n+' running · '+(list.length-n)+' idle';
+}
+$('t1').onclick=function(){tab=1;render()};
+$('t2').onclick=function(){tab=2;render()};
+$('t3').onclick=function(){tab=3;render()};
+$('grid').addEventListener('click',function(e){
+  var b=e.target.closest('.m'); if(!b) return;
+  if(!status.open){alert('Positioning is closed. Wait for the admin to start.');return}
+  openSheet(+b.dataset.n);
+});
+
+/* ---------- operator form ---------- */
+function ac(input,dd,get){
+  function show(){var q=input.value.trim().toLowerCase();
+    var m=get().filter(function(x){return !q||x.toLowerCase().indexOf(q)>-1}).slice(0,40);
+    dd.innerHTML=m.map(function(x){return'<div>'+esc(x)+'</div>'}).join(''); dd.style.display=m.length?'block':'none'}
+  input.addEventListener('input',show); input.addEventListener('focus',show);
+  input.addEventListener('blur',function(){setTimeout(function(){dd.style.display='none'},180)});
+  dd.addEventListener('pointerdown',function(e){var t=e.target.closest('div'); if(t){e.preventDefault(); input.value=t.textContent; dd.style.display='none'}});
+}
+ac($('buyer'),$('ddb'),function(){return CFG?CFG.buyers:[]});
+ac($('pos'),$('ddp'),function(){return CFG?CFG.pos:[]});
+function nowLocal(){var d=new Date(); d.setMinutes(d.getMinutes()-d.getTimezoneOffset()); return d.toISOString().slice(0,16)}
+function openSheet(m){
+  cur=m; var d=data[m]||{};
+  $('mt').textContent='Machine '+m+' · '+CFG.cap[m]+' kg';
+  $('buyer').value=d.buyer||''; $('color').value=d.color||''; $('load').value=d.load||nowLocal(); $('pos').value=d.pos||'';
+  $('err').textContent=''; $('ov').classList.add('show');
+}
+function closeSheet(){$('ov').classList.remove('show'); cur=null}
+$('cancel').onclick=closeSheet;
+$('ov').addEventListener('pointerdown',function(e){if(e.target===$('ov')) closeSheet()});
+function fin(j){busy=false; apply(j); closeSheet()}
+function fail(e){busy=false; $('err').textContent=e.message||'Failed. Try again.'}
+$('save').onclick=function(){
+  if(busy) return;
+  var buyer=$('buyer').value.trim(), pv=$('pos').value.trim();
+  var ok=CFG.pos.filter(function(p){return p.toLowerCase()===pv.toLowerCase()})[0];
+  if(!buyer){$('err').textContent='Enter the buyer name.';return}
+  if(!ok){$('err').textContent='Pick a position from the list.';return}
+  busy=true; $('err').textContent='Saving…';
+  api('save',{mc:cur,buyer:buyer,color:$('color').value,load:$('load').value,pos:ok}).then(fin).catch(fail);
+};
+$('clear').onclick=function(){ if(busy) return; busy=true; $('err').textContent='Clearing…'; api('clear',{mc:cur}).then(fin).catch(fail) };
+
+/* ---------- admin ---------- */
+function renderAdmin(){
+  var h='';
+  if(!TOKEN){
+    h='<div class="panel"><h2>Admin login</h2><label>Password</label><input id="apw" type="password" autocomplete="current-password"><div class="err" id="aerr"></div><button class="btn pri" id="alogin">Login</button></div>';
+    $('adm').innerHTML=h;
+    $('alogin').onclick=function(){
+      api('login',{password:$('apw').value}).then(function(j){TOKEN=j.token; sessionStorage.setItem('dft_token',TOKEN); render()})
+        .catch(function(e){$('aerr').textContent=e.message});
+    };
+    return;
+  }
+  h='<div class="panel"><h2>Positioning control</h2>'
+   +'<div style="font-size:14px;color:var(--mut)">Status: <b style="color:'+(status.open?'var(--ok)':'var(--bad)')+'">'+(status.open?'OPEN':'CLOSED')+'</b>'
+   +(status.startedAt?' · started '+tm(status.startedAt):'')+(status.stoppedAt?' · stopped '+tm(status.stoppedAt):'')+'</div>'
+   +(status.open
+      ? '<button class="btn stop" id="astop">STOP positioning</button>'
+      : '<label class="chk"><input type="checkbox" id="aclr" checked> Clear previous data before starting</label><button class="btn go" id="astart">START positioning</button>')
+   +'<div class="err" id="aerr"></div>'
+   +'<h2 style="margin-top:20px">Change password</h2><input id="npw" type="password" placeholder="New password (min 6)"><button class="btn" id="apass">Update password</button>'
+   +'<button class="btn" id="alogout">Logout</button></div>';
+  $('adm').innerHTML=h;
+  function guard(p){ $('aerr').textContent=''; return p.then(function(j){apply(j)}).catch(function(e){
+    if(/login required/i.test(e.message)){TOKEN='';sessionStorage.removeItem('dft_token');render()} else $('aerr').textContent=e.message}) }
+  if($('astart')) $('astart').onclick=function(){ if(confirm('Start positioning now? Operators will be able to update.')) guard(api('start',{clearOld:$('aclr').checked})) };
+  if($('astop')) $('astop').onclick=function(){ if(confirm('Stop positioning? Operators will be locked out and data saved to Archive.')) guard(api('stop')) };
+  $('apass').onclick=function(){ api('setpass',{newPassword:$('npw').value}).then(function(){$('npw').value='';$('aerr').textContent='Password updated.'}).catch(function(e){$('aerr').textContent=e.message}) };
+  $('alogout').onclick=function(){ api('logout').catch(function(){}); TOKEN=''; sessionStorage.removeItem('dft_token'); render() };
+}
+
+/* ---------- export ---------- */
+function stamp(){var n=new Date(),p=function(x){return String(x).padStart(2,'0')};
+  return {d:p(n.getDate())+'/'+p(n.getMonth()+1)+'/'+n.getFullYear(), t:p(n.getHours())+':'+p(n.getMinutes()),
+          f:n.getFullYear()+p(n.getMonth()+1)+p(n.getDate())+'-'+p(n.getHours())+p(n.getMinutes())}}
+function allRows(){return CFG.u1.concat(CFG.u2)}
+function exportImage(){
+  var s=stamp(), rows=allRows(), W=[70,90,190,150,130,190], T=W.reduce(function(a,b){return a+b},0), RH=30, H=RH*(3+rows.length), S=2;
+  var cv=document.createElement('canvas'); cv.width=T*S; cv.height=H*S;
+  var c=cv.getContext('2d'); c.scale(S,S); c.fillStyle='#fff'; c.fillRect(0,0,T,H); c.lineWidth=1; c.textAlign='center'; c.textBaseline='middle';
+  function cell(x,y,w,t,b){
+    if(b){c.fillStyle='#d9e2f3'; c.fillRect(x,y,w,RH)}
+    c.strokeStyle='#000'; c.strokeRect(x+.5,y+.5,w,RH); c.fillStyle='#000'; c.font=(b?'bold ':'')+'13px Arial,sans-serif';
+    var q=String(t==null?'':t); while(q.length>1&&c.measureText(q).width>w-8) q=q.slice(0,-1); c.fillText(q,x+w/2,y+RH/2+1);
+  }
+  function line(y,a,b){var x=0; a.forEach(function(t,i){cell(x,y,W[i],t,b); x+=W[i]})}
+  cell(0,0,T,'FLOOR POSITION',true);
+  cell(0,RH,W[0]+W[1],'DATE',true); cell(W[0]+W[1],RH,W[2],s.d); cell(W[0]+W[1]+W[2],RH,W[3],'');
+  cell(W[0]+W[1]+W[2]+W[3],RH,W[4],'TIME',true); cell(T-W[5],RH,W[5],s.t);
+  line(RH*2,['MC','CAPACITY','BUYER','COLOR','LOAD TIME','POSITION'],true);
+  rows.forEach(function(n,i){var d=data[n]||{}; line(RH*(3+i),[n,CFG.cap[n],d.buyer||'',d.color||'',d.loadTxt||'',d.pos||''],false)});
+  cv.toBlob(function(b){var a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download='floor-position-'+s.f+'.png'; document.body.appendChild(a); a.click(); a.remove()},'image/png');
+}
+function exportExcel(){
+  if(!window.XLSX){alert('Excel library did not load.');return}
+  var s=stamp(), r=[['FLOOR POSITION'],['DATE','',s.d,'','TIME',s.t],['MC','CAPACITY','BUYER','COLOR','LOAD TIME','POSITION']];
+  allRows().forEach(function(n){var d=data[n]||{}; r.push([n,CFG.cap[n],d.buyer||'',d.color||'',d.loadTxt||'',d.pos||''])});
+  var ws=XLSX.utils.aoa_to_sheet(r); ws['!merges']=[{s:{r:0,c:0},e:{r:0,c:5}},{s:{r:1,c:0},e:{r:1,c:1}}];
+  ws['!cols']=[{wch:7},{wch:10},{wch:22},{wch:18},{wch:16},{wch:24}];
+  var wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Floor Position'); XLSX.writeFile(wb,'floor-position-'+s.f+'.xlsx');
+}
+
+$('expimg').onclick=function(){ if(CFG) exportImage() };
+$('expxls').onclick=function(){ if(CFG) exportExcel() };
+
+/* ---------- start ---------- */
+api('boot').then(function(j){CFG=j.cfg; apply(j)}).catch(function(e){$('banner').className='closed'; $('banner').textContent='Cannot reach server: '+e.message});
+setInterval(function(){ if(!CFG||cur!==null||busy) return; api('data').then(apply).catch(function(){}) },15000);
+</script>
+</body>
+</html>
