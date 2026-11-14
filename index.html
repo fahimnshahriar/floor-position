@@ -235,7 +235,7 @@ function renderAdmin(){
       : '<label class="chk"><input type="checkbox" id="aclr" checked> Clear previous data before starting</label><button class="btn go" id="astart">START positioning</button>')
    +'<div class="err" id="aerr"></div>'
    +sugHtml()
-   +'<button class="btn" id="alogout" style="margin-top:20px">Logout</button><div style="text-align:center;font-size:11px;color:var(--mut);margin-top:10px">page v10</div></div>';
+   +'<button class="btn" id="alogout" style="margin-top:20px">Logout</button><div style="text-align:center;font-size:11px;color:var(--mut);margin-top:10px">page v11</div></div>';
   $('adm').innerHTML=h;
   function guard(p){ $('aerr').textContent='Working…'; return p.then(function(j){apply(j)}).catch(function(e){
     if(/login required/i.test(e.message)){TOKEN='';sessionStorage.removeItem('dft_token');render()}
@@ -280,15 +280,39 @@ function exportImage(){
   cell(W[0]+W[1]+W[2]+W[3],RH,W[4],'TIME',true); cell(T-W[5],RH,W[5],s.t);
   line(RH*2,['MC','CAPACITY','BUYER','COLOR','LOAD TIME','POSITION'],true);
   rows.forEach(function(n,i){var d=data[n]||{}; line(RH*(3+i),[n,CFG.cap[n],d.buyer||'',d.color||'',fmtT(d),d.pos||''],false)});
-  cv.toBlob(function(b){var a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download='floor-position-'+s.f+'.png'; document.body.appendChild(a); a.click(); a.remove()},'image/png');
+  cv.toBlob(function(b){ if(!b){alert('Could not make the image.');return} saveBlob(b,'floor-position-'+s.f+'.png') },'image/png');
+}
+/* download a file; also show a fallback bar for phone/in-app browsers that ignore downloads */
+function saveBlob(blob,name){
+  var url=URL.createObjectURL(blob);
+  try{ var a=document.createElement('a'); a.href=url; a.download=name; document.body.appendChild(a); a.click(); a.remove() }catch(e){}
+  var old=$('dlbar'); if(old) old.remove();
+  var bar=document.createElement('div'); bar.id='dlbar';
+  bar.style.cssText='position:fixed;left:10px;right:10px;bottom:10px;z-index:60;background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:12px;padding:10px 12px;box-shadow:0 6px 18px rgba(0,0,0,.3);font-size:14px;display:flex;gap:8px;align-items:center';
+  bar.innerHTML='<span style="flex:1">'+esc(name)+'<br><span style="font-size:12px;color:var(--mut)">Not downloaded? Tap Share / Open.</span></span><button id="dlgo" style="padding:9px 14px;border-radius:10px;border:1px solid var(--acc);background:var(--acc);color:#fff;font-weight:700">Share / Open</button><button id="dlx" style="padding:9px 12px;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--ink);font-weight:700">×</button>';
+  document.body.appendChild(bar);
+  $('dlx').onclick=function(){bar.remove()};
+  $('dlgo').onclick=function(){
+    try{
+      var f=new File([blob],name,{type:blob.type});
+      if(navigator.canShare&&navigator.canShare({files:[f]})){ navigator.share({files:[f]}).catch(function(){}); return }
+    }catch(e){}
+    window.open(url,'_blank');
+  };
+  setTimeout(function(){ if(bar.parentNode) bar.remove(); URL.revokeObjectURL(url) },60000);
 }
 function exportExcel(){
-  if(!window.XLSX){alert('Excel library did not load.');return}
   var s=stamp(), r=[['FLOOR POSITION'],['DATE','',s.d,'','TIME',s.t],['MC','CAPACITY','BUYER','COLOR','LOAD TIME','POSITION']];
   allRows().forEach(function(n){var d=data[n]||{}; r.push([n,CFG.cap[n],d.buyer||'',d.color||'',fmtT(d),d.pos||''])});
+  if(!window.XLSX){ /* library blocked/offline: fall back to a CSV that Excel opens */
+    var csv='﻿'+r.map(function(row){return row.map(function(v){return '"'+String(v==null?'':v).replace(/"/g,'""')+'"'}).join(',')}).join('\r\n');
+    saveBlob(new Blob([csv],{type:'text/csv'}),'floor-position-'+s.f+'.csv'); return;
+  }
   var ws=XLSX.utils.aoa_to_sheet(r); ws['!merges']=[{s:{r:0,c:0},e:{r:0,c:5}},{s:{r:1,c:0},e:{r:1,c:1}}];
   ws['!cols']=[{wch:7},{wch:10},{wch:22},{wch:18},{wch:16},{wch:24}];
-  var wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Floor Position'); XLSX.writeFile(wb,'floor-position-'+s.f+'.xlsx');
+  var wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Floor Position');
+  var out=XLSX.write(wb,{bookType:'xlsx',type:'array'});
+  saveBlob(new Blob([out],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}),'floor-position-'+s.f+'.xlsx');
 }
 
 $('expimg').onclick=function(){ if(CFG) exportImage() };
@@ -305,7 +329,7 @@ $('cfgsave').onclick=function(){
 $('cfgreset').onclick=function(){ try{ localStorage.removeItem('dft_api') }catch(e){} location.reload() };
 
 /* ---------- auto-update: reload when a newer page version is uploaded ---------- */
-var PAGE_VER='v10';
+var PAGE_VER='v11';
 function checkUpdate(){
   if(cur!==null||busy||location.protocol==='file:') return;
   fetch(location.href.split('#')[0].split('?')[0]+'?_='+Date.now(),{cache:'no-store'})
