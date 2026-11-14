@@ -75,13 +75,14 @@ var API_URL = 'https://script.google.com/macros/s/AKfycbwSLVauvSIP6sBVZfb669a0DX
 /* ======================================================================= */
 
 var $ = function(i){return document.getElementById(i)};
-var CFG=null, data={}, status={open:false}, tab=1, cur=null, busy=false;
+var admSig='', CFG=null, data={}, status={open:false}, tab=1, cur=null, busy=false;
 var TOKEN = sessionStorage.getItem('dft_token') || '';
 
 function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
 function api(action, extra){
-  return fetch(API_URL,{method:'POST',body:JSON.stringify(Object.assign({action:action,token:TOKEN},extra||{}))})
-    .then(function(r){return r.json()})
+  var ctl=new AbortController(), tmo=setTimeout(function(){ctl.abort()},30000);
+  return fetch(API_URL,{method:'POST',signal:ctl.signal,body:JSON.stringify(Object.assign({action:action,token:TOKEN},extra||{}))})
+    .then(function(r){clearTimeout(tmo); return r.json()},function(e){clearTimeout(tmo); throw new Error(e.name==='AbortError'?'Server took too long. Try again.':'Network error. Check internet.')})
     .then(function(j){ if(!j.ok) throw new Error(j.error||'Error'); return j; });
 }
 function tm(ms){return ms?new Date(ms).toLocaleString([], {day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}):''}
@@ -95,7 +96,7 @@ function render(){
   var isAdm = tab==3;
   $('grid').style.display = isAdm?'none':'grid';
   $('adm').style.display = isAdm?'block':'none';
-  if(isAdm){ $('stat').textContent=''; renderAdmin(); return }
+  if(isAdm){ $('stat').textContent=''; var sig=TOKEN+'|'+status.open+'|'+status.startedAt+'|'+status.stoppedAt; if(sig!==admSig){admSig=sig; renderAdmin()} return }
   if(!CFG) return;
   var list = tab==1?CFG.u1:CFG.u2, n=0, h='';
   list.forEach(function(m){
@@ -111,7 +112,7 @@ function render(){
 }
 $('t1').onclick=function(){tab=1;render()};
 $('t2').onclick=function(){tab=2;render()};
-$('t3').onclick=function(){tab=3;render()};
+$('t3').onclick=function(){tab=3;admSig='';render()};
 $('grid').addEventListener('click',function(e){
   var b=e.target.closest('.m'); if(!b) return;
   if(!status.open){alert('Positioning is closed. Wait for the admin to start.');return}
@@ -171,7 +172,7 @@ function renderAdmin(){
       ? '<button class="btn stop" id="astop">STOP positioning</button>'
       : '<label class="chk"><input type="checkbox" id="aclr" checked> Clear previous data before starting</label><button class="btn go" id="astart">START positioning</button>')
    +'<div class="err" id="aerr"></div>'
-   +'<button class="btn" id="alogout" style="margin-top:20px">Logout</button></div>';
+   +'<button class="btn" id="alogout" style="margin-top:20px">Logout</button><div style="text-align:center;font-size:11px;color:var(--mut);margin-top:10px">page v4</div></div>';
   $('adm').innerHTML=h;
   function guard(p){ $('aerr').textContent='Working…'; return p.then(function(j){apply(j)}).catch(function(e){
     if(/login required/i.test(e.message)){TOKEN='';sessionStorage.removeItem('dft_token');render()}
@@ -179,7 +180,7 @@ function renderAdmin(){
   function arm(btn,label,fn){ var t=0; btn.onclick=function(){
     if(!t){btn.textContent='Tap again to confirm'; t=setTimeout(function(){btn.textContent=label;t=0},4000); return}
     clearTimeout(t); t=0; btn.textContent='Working…'; fn() } }
-  if($('astart')) arm($('astart'),'START positioning',function(){guard(api('start',{clearOld:$('aclr').checked}))});
+  if($('astart')) $('astart').onclick=function(){ $('astart').disabled=true; $('astart').textContent='Starting…'; guard(api('start',{clearOld:$('aclr').checked})) };
   if($('astop')) arm($('astop'),'STOP positioning',function(){guard(api('stop'))});
   $('aback').onclick=function(){tab=1;render()};
   $('alogout').onclick=function(){ api('logout').catch(function(){}); TOKEN=''; sessionStorage.removeItem('dft_token'); render() };
