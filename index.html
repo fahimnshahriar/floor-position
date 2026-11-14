@@ -164,21 +164,24 @@ function renderAdmin(){
     };
     return;
   }
-  h='<div class="panel"><h2>Positioning control</h2>'
+  h='<div class="panel"><button class="btn" id="aback" style="margin:0 0 12px">← Back to machines</button><h2>Positioning control</h2>'
    +'<div style="font-size:14px;color:var(--mut)">Status: <b style="color:'+(status.open?'var(--ok)':'var(--bad)')+'">'+(status.open?'OPEN':'CLOSED')+'</b>'
    +(status.startedAt?' · started '+tm(status.startedAt):'')+(status.stoppedAt?' · stopped '+tm(status.stoppedAt):'')+'</div>'
    +(status.open
       ? '<button class="btn stop" id="astop">STOP positioning</button>'
       : '<label class="chk"><input type="checkbox" id="aclr" checked> Clear previous data before starting</label><button class="btn go" id="astart">START positioning</button>')
    +'<div class="err" id="aerr"></div>'
-   +'<h2 style="margin-top:20px">Change password</h2><input id="npw" type="password" placeholder="New password (min 6)"><button class="btn" id="apass">Update password</button>'
-   +'<button class="btn" id="alogout">Logout</button></div>';
+   +'<button class="btn" id="alogout" style="margin-top:20px">Logout</button></div>';
   $('adm').innerHTML=h;
-  function guard(p){ $('aerr').textContent=''; return p.then(function(j){apply(j)}).catch(function(e){
-    if(/login required/i.test(e.message)){TOKEN='';sessionStorage.removeItem('dft_token');render()} else $('aerr').textContent=e.message}) }
-  if($('astart')) $('astart').onclick=function(){ if(confirm('Start positioning now? Operators will be able to update.')) guard(api('start',{clearOld:$('aclr').checked})) };
-  if($('astop')) $('astop').onclick=function(){ if(confirm('Stop positioning? Operators will be locked out and data saved to Archive.')) guard(api('stop')) };
-  $('apass').onclick=function(){ api('setpass',{newPassword:$('npw').value}).then(function(){$('npw').value='';$('aerr').textContent='Password updated.'}).catch(function(e){$('aerr').textContent=e.message}) };
+  function guard(p){ $('aerr').textContent='Working…'; return p.then(function(j){apply(j)}).catch(function(e){
+    if(/login required/i.test(e.message)){TOKEN='';sessionStorage.removeItem('dft_token');render()}
+    else {renderAdmin(); $('aerr').textContent=e.message}}) }
+  function arm(btn,label,fn){ var t=0; btn.onclick=function(){
+    if(!t){btn.textContent='Tap again to confirm'; t=setTimeout(function(){btn.textContent=label;t=0},4000); return}
+    clearTimeout(t); t=0; btn.textContent='Working…'; fn() } }
+  if($('astart')) arm($('astart'),'START positioning',function(){guard(api('start',{clearOld:$('aclr').checked}))});
+  if($('astop')) arm($('astop'),'STOP positioning',function(){guard(api('stop'))});
+  $('aback').onclick=function(){tab=1;render()};
   $('alogout').onclick=function(){ api('logout').catch(function(){}); TOKEN=''; sessionStorage.removeItem('dft_token'); render() };
 }
 
