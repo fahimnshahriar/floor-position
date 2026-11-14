@@ -99,7 +99,7 @@ function fmtT(d){
   if(!d) return '';
   var m=/T(\d\d):(\d\d)/.exec(d.load||'');
   if(m){ var h=+m[1]; return (h%12||12)+':'+m[2]+' '+(h>=12?'PM':'AM') }
-  return fmtT(d);
+  return String(d.loadTxt||'');
 }
 function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
 function api(action, extra){
@@ -235,7 +235,7 @@ function renderAdmin(){
       : '<label class="chk"><input type="checkbox" id="aclr" checked> Clear previous data before starting</label><button class="btn go" id="astart">START positioning</button>')
    +'<div class="err" id="aerr"></div>'
    +sugHtml()
-   +'<button class="btn" id="alogout" style="margin-top:20px">Logout</button><div style="text-align:center;font-size:11px;color:var(--mut);margin-top:10px">page v11</div></div>';
+   +'<button class="btn" id="alogout" style="margin-top:20px">Logout</button><div style="text-align:center;font-size:11px;color:var(--mut);margin-top:10px">page v12</div></div>';
   $('adm').innerHTML=h;
   function guard(p){ $('aerr').textContent='Working…'; return p.then(function(j){apply(j)}).catch(function(e){
     if(/login required/i.test(e.message)){TOKEN='';sessionStorage.removeItem('dft_token');render()}
@@ -315,8 +315,12 @@ function exportExcel(){
   saveBlob(new Blob([out],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}),'floor-position-'+s.f+'.xlsx');
 }
 
-$('expimg').onclick=function(){ if(CFG) exportImage() };
-$('expxls').onclick=function(){ if(CFG) exportExcel() };
+function runExport(fn){
+  if(!CFG){ alert('Data has not loaded from the server yet. Check the red bar at the top, wait a few seconds, then try again.'); return }
+  try{ fn() }catch(e){ alert('Export failed: '+(e&&e.message||e)) }
+}
+$('expimg').onclick=function(){ runExport(exportImage) };
+$('expxls').onclick=function(){ runExport(exportExcel) };
 
 $('cfg').onclick=function(){ $('cfgurl').value=API_URL; $('cfgerr').textContent=''; $('cfgov').style.display='flex' };
 $('cfgx').onclick=function(){ $('cfgov').style.display='none' };
@@ -329,7 +333,7 @@ $('cfgsave').onclick=function(){
 $('cfgreset').onclick=function(){ try{ localStorage.removeItem('dft_api') }catch(e){} location.reload() };
 
 /* ---------- auto-update: reload when a newer page version is uploaded ---------- */
-var PAGE_VER='v11';
+var PAGE_VER='v12';
 function checkUpdate(){
   if(cur!==null||busy||location.protocol==='file:') return;
   fetch(location.href.split('#')[0].split('?')[0]+'?_='+Date.now(),{cache:'no-store'})
