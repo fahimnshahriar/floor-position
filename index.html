@@ -86,7 +86,7 @@ var API_URL = (function(){ try{ return localStorage.getItem('dft_api') || DEFAUL
 /* ======================================================================= */
 
 var $ = function(i){return document.getElementById(i)};
-var admSig='', CFG=null, data={}, status={open:false}, tab=1, cur=null, busy=false;
+var admSig='', CFG=null, data={}, ST={open:false}, tab=1, cur=null, busy=false;
 var TOKEN = sessionStorage.getItem('dft_token') || '';
 
 function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
@@ -97,17 +97,17 @@ function api(action, extra){
     .then(function(j){ if(!j.ok) throw new Error(j.error||'Error'); return j; });
 }
 function tm(ms){return ms?new Date(ms).toLocaleString([], {day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}):''}
-function apply(j){ if(j.status) status=j.status; if(j.data) data=j.data; render(); }
+function apply(j){ if(j.status) ST=j.status; if(j.data) data=j.data; render(); }
 
 function render(){
   var b=$('banner');
-  if(status.open){b.className='open'; b.textContent='POSITIONING OPEN · started '+tm(status.startedAt)}
-  else {b.className='closed'; b.textContent='POSITIONING CLOSED'+(status.stoppedAt?' · stopped '+tm(status.stoppedAt):'')+' – view only'}
+  if(ST.open){b.className='open'; b.textContent='POSITIONING OPEN · started '+tm(ST.startedAt)}
+  else {b.className='closed'; b.textContent='POSITIONING CLOSED'+(ST.stoppedAt?' · stopped '+tm(ST.stoppedAt):'')+' – view only'}
   ['t1','t2','t3'].forEach(function(id,i){$(id).className=(tab==i+1)?'on':''});
   var isAdm = tab==3;
   $('grid').style.display = isAdm?'none':'grid';
   $('adm').style.display = isAdm?'block':'none';
-  if(isAdm){ $('stat').textContent=''; var sig=TOKEN+'|'+status.open+'|'+status.startedAt+'|'+status.stoppedAt; if(sig!==admSig){admSig=sig; renderAdmin()} return }
+  if(isAdm){ $('stat').textContent=''; var sig=TOKEN+'|'+ST.open+'|'+ST.startedAt+'|'+ST.stoppedAt; if(sig!==admSig){admSig=sig; renderAdmin()} return }
   if(!CFG) return;
   var list = tab==1?CFG.u1:CFG.u2, n=0, h='';
   list.forEach(function(m){
@@ -115,7 +115,7 @@ function render(){
     if(d){ n++;
       h+='<button class="m" data-n="'+m+'"><div class="top"><span class="no">'+m+'</span><span class="cap">'+cap+' kg</span></div><div class="buyer">'+esc(d.buyer)+'</div><div class="col">'+esc(d.color)+'</div><div class="pos">'+esc(d.pos||'—')+'</div><div class="meta">Loaded '+esc(d.loadTxt)+'</div></button>';
     } else {
-      h+='<button class="m idle" data-n="'+m+'"><div class="top"><span class="no">'+m+'</span><span class="cap">'+cap+' kg</span></div><div class="buyer">Idle</div><div class="meta">'+(status.open?'Tap to update':'')+'</div></button>';
+      h+='<button class="m idle" data-n="'+m+'"><div class="top"><span class="no">'+m+'</span><span class="cap">'+cap+' kg</span></div><div class="buyer">Idle</div><div class="meta">'+(ST.open?'Tap to update':'')+'</div></button>';
     }
   });
   $('grid').innerHTML=h;
@@ -126,7 +126,7 @@ $('t2').onclick=function(){tab=2;render()};
 $('t3').onclick=function(){tab=3;admSig='';render()};
 $('grid').addEventListener('click',function(e){
   var b=e.target.closest('.m'); if(!b) return;
-  if(!status.open){alert('Positioning is closed. Wait for the admin to start.');return}
+  if(!ST.open){alert('Positioning is closed. Wait for the admin to start.');return}
   openSheet(+b.dataset.n);
 });
 
@@ -177,13 +177,13 @@ function renderAdmin(){
     return;
   }
   h='<div class="panel"><button class="btn" id="aback" style="margin:0 0 12px">← Back to machines</button><h2>Positioning control</h2>'
-   +'<div style="font-size:14px;color:var(--mut)">Status: <b style="color:'+(status.open?'var(--ok)':'var(--bad)')+'">'+(status.open?'OPEN':'CLOSED')+'</b>'
-   +(status.startedAt?' · started '+tm(status.startedAt):'')+(status.stoppedAt?' · stopped '+tm(status.stoppedAt):'')+'</div>'
-   +(status.open
+   +'<div style="font-size:14px;color:var(--mut)">Status: <b style="color:'+(ST.open?'var(--ok)':'var(--bad)')+'">'+(ST.open?'OPEN':'CLOSED')+'</b>'
+   +(ST.startedAt?' · started '+tm(ST.startedAt):'')+(ST.stoppedAt?' · stopped '+tm(ST.stoppedAt):'')+'</div>'
+   +(ST.open
       ? '<button class="btn stop" id="astop">STOP positioning</button>'
       : '<label class="chk"><input type="checkbox" id="aclr" checked> Clear previous data before starting</label><button class="btn go" id="astart">START positioning</button>')
    +'<div class="err" id="aerr"></div>'
-   +'<button class="btn" id="alogout" style="margin-top:20px">Logout</button><div style="text-align:center;font-size:11px;color:var(--mut);margin-top:10px">page v5</div></div>';
+   +'<button class="btn" id="alogout" style="margin-top:20px">Logout</button><div style="text-align:center;font-size:11px;color:var(--mut);margin-top:10px">page v6</div></div>';
   $('adm').innerHTML=h;
   function guard(p){ $('aerr').textContent='Working…'; return p.then(function(j){apply(j)}).catch(function(e){
     if(/login required/i.test(e.message)){TOKEN='';sessionStorage.removeItem('dft_token');render()}
