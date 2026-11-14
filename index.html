@@ -159,8 +159,12 @@ function ac(input,dd,get){
   input.addEventListener('blur',function(){setTimeout(function(){dd.style.display='none'},180)});
   dd.addEventListener('pointerdown',function(e){var t=e.target.closest('div'); if(t){e.preventDefault(); input.value=t.textContent; dd.style.display='none'}});
 }
-ac($('buyer'),$('ddb'),function(){return CFG?CFG.buyers:[]});
-ac($('pos'),$('ddp'),function(){return CFG?CFG.pos:[]});
+/* ---------- extra suggestions added by admin (stored on this device) ---------- */
+function getSug(){ try{ var s=JSON.parse(localStorage.getItem('dft_sug')); return {buyers:(s&&s.buyers)||[],pos:(s&&s.pos)||[]} }catch(e){ return {buyers:[],pos:[]} } }
+function setSug(s){ try{ localStorage.setItem('dft_sug',JSON.stringify(s)) }catch(e){} }
+function merged(k){ var base=CFG?CFG[k]:[]; return base.concat((getSug()[k]||[]).filter(function(x){return base.indexOf(x)<0})) }
+ac($('buyer'),$('ddb'),function(){return merged('buyers')});
+ac($('pos'),$('ddp'),function(){return merged('pos')});
 function nowLocal(){var d=new Date(); d.setMinutes(d.getMinutes()-d.getTimezoneOffset()); return d.toISOString().slice(0,16)}
 function openSheet(m){
   cur=m; var d=data[m]||{};
@@ -176,15 +180,24 @@ function fail(e){busy=false; $('err').textContent=e.message||'Failed. Try again.
 $('save').onclick=function(){
   if(busy) return;
   var buyer=$('buyer').value.trim(), pv=$('pos').value.trim();
-  var ok=CFG.pos.filter(function(p){return p.toLowerCase()===pv.toLowerCase()})[0];
+  var ok=merged('pos').filter(function(p){return p.toLowerCase()===pv.toLowerCase()})[0] || pv;
   if(!buyer){$('err').textContent='Enter the buyer name.';return}
-  if(!ok){$('err').textContent='Pick a position from the list.';return}
+  if(!ok){$('err').textContent='Enter the position.';return}
   busy=true; $('err').textContent='Saving…';
   api('save',{mc:cur,buyer:buyer,color:$('color').value,load:$('load').value,pos:ok}).then(fin).catch(fail);
 };
 $('clear').onclick=function(){ if(busy) return; busy=true; $('err').textContent='Clearing…'; api('clear',{mc:cur}).then(fin).catch(fail) };
 
 /* ---------- admin ---------- */
+function sugHtml(){
+  var s=getSug(), h='<div style="margin-top:20px;border-top:1px solid var(--line);padding-top:6px"><h2 style="font-size:16px;margin:8px 0 0">Add suggestions</h2>';
+  [['buyers','Buyer'],['pos','Position']].forEach(function(p){
+    var k=p[0];
+    h+='<label>New '+p[1]+'</label><div style="display:flex;gap:8px"><input id="sg_'+k+'" autocomplete="off" placeholder="Type '+p[1].toLowerCase()+'…"><button class="btn pri" id="sgb_'+k+'" style="width:auto;margin:0;padding:0 18px">Add</button></div>';
+    if(s[k].length) h+='<div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:6px">'+s[k].map(function(x){return '<span style="background:var(--idle);border:1px solid var(--line);border-radius:14px;padding:4px 6px 4px 10px;font-size:13px">'+esc(x)+' <button class="sgx" data-k="'+k+'" data-v="'+esc(x)+'" style="border:0;background:none;color:var(--bad);font-size:15px;font-weight:700">×</button></span>'}).join('')+'</div>';
+  });
+  return h+'<div style="font-size:11px;color:var(--mut);margin-top:8px">Saved on this device only.</div></div>';
+}
 function renderAdmin(){
   var h='';
   if(!TOKEN){
@@ -203,6 +216,7 @@ function renderAdmin(){
       ? '<button class="btn stop" id="astop">STOP positioning</button>'
       : '<label class="chk"><input type="checkbox" id="aclr" checked> Clear previous data before starting</label><button class="btn go" id="astart">START positioning</button>')
    +'<div class="err" id="aerr"></div>'
+   +sugHtml()
    +'<button class="btn" id="alogout" style="margin-top:20px">Logout</button><div style="text-align:center;font-size:11px;color:var(--mut);margin-top:10px">page v7</div></div>';
   $('adm').innerHTML=h;
   function guard(p){ $('aerr').textContent='Working…'; return p.then(function(j){apply(j)}).catch(function(e){
@@ -214,6 +228,17 @@ function renderAdmin(){
   if($('astart')) $('astart').onclick=function(){ $('astart').disabled=true; $('astart').textContent='Starting…'; guard(api('start',{clearOld:$('aclr').checked})) };
   if($('astop')) arm($('astop'),'STOP positioning',function(){guard(api('stop'))});
   $('aback').onclick=function(){tab=1;render()};
+  ['buyers','pos'].forEach(function(k){
+    $('sgb_'+k).onclick=function(){
+      var v=$('sg_'+k).value.trim(); if(!v) return;
+      var s=getSug(), all=merged(k);
+      if(!all.some(function(x){return x.toLowerCase()===v.toLowerCase()})){ s[k].push(v); setSug(s) }
+      renderAdmin();
+    };
+  });
+  Array.prototype.forEach.call(document.querySelectorAll('.sgx'),function(b){
+    b.onclick=function(){ var s=getSug(), k=b.dataset.k; s[k]=s[k].filter(function(x){return x!==b.dataset.v}); setSug(s); renderAdmin() };
+  });
   $('alogout').onclick=function(){ api('logout').catch(function(){}); TOKEN=''; sessionStorage.removeItem('dft_token'); render() };
 }
 
