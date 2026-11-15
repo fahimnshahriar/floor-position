@@ -145,6 +145,7 @@ $('t2').onclick=function(){tab=2;render()};
 $('t3').onclick=function(){tab=3;admSig='';render()};
 $('grid').addEventListener('click',function(e){
   var b=e.target.closest('.m'); if(!b) return;
+  if(Date.now()-closedAt<700) return; /* ignore the tap that just closed the form */
   if(!ST.open){alert('Positioning is closed. Wait for the admin to start.');return}
   openSheet(+b.dataset.n);
 });
@@ -197,9 +198,22 @@ function openSheet(m){
   $('buyer').value=d.buyer||''; $('color').value=d.color||''; $('load').value=(d.load&&/T\d\d:\d\d/.test(d.load)?d.load.slice(11,16):nowTime()); $('pos').value=d.pos||'';
   $('err').textContent=''; $('ov').classList.add('show');
 }
-function closeSheet(){$('ov').classList.remove('show'); cur=null}
+var closedAt=0;
+function closeSheet(){
+  closedAt=Date.now(); cur=null;
+  var a=document.activeElement; if(a&&a.blur) try{a.blur()}catch(e){}
+  $('ov').classList.remove('show'); $('ov').classList.remove('kb');
+}
 $('cancel').onclick=closeSheet;
-$('ov').addEventListener('pointerdown',function(e){if(e.target===$('ov')) closeSheet()});
+/* tapping outside closes the form; the tap is swallowed so it can't open the machine underneath */
+$('ov').addEventListener('pointerdown',function(e){ if(e.target===$('ov')){ e.preventDefault(); closeSheet() } });
+$('ov').addEventListener('click',function(e){ if(e.target===$('ov')){ e.preventDefault(); e.stopPropagation() } });
+/* pressing Save/Clear/Cancel must not take focus away from the field, otherwise the keyboard
+   collapses first, the buttons jump, and the tap is lost */
+Array.prototype.forEach.call(document.querySelectorAll('.row button'),function(b){
+  b.addEventListener('pointerdown',function(e){ e.preventDefault() });
+  b.addEventListener('mousedown',function(e){ e.preventDefault() });
+});
 function fin(j){busy=false; apply(j); closeSheet()}
 function fail(e){busy=false; $('err').textContent=e.message||'Failed. Try again.'}
 $('save').onclick=function(){
@@ -242,7 +256,7 @@ function renderAdmin(){
       : '<label class="chk"><input type="checkbox" id="aclr" checked> Clear previous data before starting</label><button class="btn go" id="astart">START positioning</button>')
    +'<div class="err" id="aerr"></div>'
    +sugHtml()
-   +'<button class="btn" id="alogout" style="margin-top:20px">Logout</button><div style="text-align:center;font-size:11px;color:var(--mut);margin-top:10px">page v14</div></div>';
+   +'<button class="btn" id="alogout" style="margin-top:20px">Logout</button><div style="text-align:center;font-size:11px;color:var(--mut);margin-top:10px">page v15</div></div>';
   $('adm').innerHTML=h;
   function guard(p){ $('aerr').textContent='Working…'; return p.then(function(j){apply(j)}).catch(function(e){
     if(/login required/i.test(e.message)){TOKEN='';sessionStorage.removeItem('dft_token');render()}
@@ -340,7 +354,7 @@ $('cfgsave').onclick=function(){
 $('cfgreset').onclick=function(){ try{ localStorage.removeItem('dft_api') }catch(e){} location.reload() };
 
 /* ---------- auto-update: reload when a newer page version is uploaded ---------- */
-var PAGE_VER='v14';
+var PAGE_VER='v15';
 if('serviceWorker' in navigator && location.protocol==='https:'){ window.addEventListener('load',function(){ navigator.serviceWorker.register('sw.js').catch(function(){}) }) }
 function checkUpdate(){
   if(cur!==null||busy||location.protocol==='file:') return;
