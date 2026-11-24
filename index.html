@@ -3,15 +3,6 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
-<meta http-equiv="Pragma" content="no-cache">
-<link rel="manifest" href="manifest.webmanifest">
-<meta name="theme-color" content="#0b6bcb">
-<meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="Floor Tracker">
-<link rel="icon" type="image/png" href="icon-192.png">
-<link rel="apple-touch-icon" href="icon-192.png">
 <title>Dyeing Floor Tracker</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
@@ -74,9 +65,10 @@ input{width:100%;padding:12px;font-size:16px;border:1px solid var(--line);border
   <label>Buyer name</label>
   <div class="w"><input id="buyer" autocomplete="off" placeholder="Start typing…"><div class="dd" id="ddb"></div></div>
   <label>Color</label><input id="color" autocomplete="off">
-  <label>Load time</label><input id="load" type="time">
+  <label>Load time</label><input id="load" type="datetime-local">
   <label>Position</label>
   <div class="w"><input id="pos" autocomplete="off" placeholder="Start typing… e.g. scou"><div class="dd" id="ddp"></div></div>
+  <label>Next ready batch</label><input id="nextb" autocomplete="off" placeholder="Batch / lot no.">
   <div class="err" id="err"></div>
   <div class="row"><button id="cancel">Cancel</button><button class="del" id="clear">Clear</button><button class="save" id="save">Save</button></div>
 </div></div>
@@ -99,20 +91,13 @@ var API_URL = (function(){ try{ return localStorage.getItem('dft_api') || DEFAUL
 
 var $ = function(i){return document.getElementById(i)};
 var admSig='', CFG=null, data={}, ST={open:false}, tab=1, cur=null, busy=false;
-var TOKEN = (function(){ try{ return sessionStorage.getItem('dft_token') || '' }catch(e){ return '' } })();
+var TOKEN = sessionStorage.getItem('dft_token') || '';
 
-/* show load time only (no date) */
-function fmtT(d){
-  if(!d) return '';
-  var m=/T(\d\d):(\d\d)/.exec(d.load||'');
-  if(m){ var h=+m[1]; return (h%12||12)+':'+m[2]+' '+(h>=12?'PM':'AM') }
-  return String(d.loadTxt||'');
-}
 function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
 function api(action, extra){
   var ctl=new AbortController(), tmo=setTimeout(function(){ctl.abort()},30000);
   return fetch(API_URL,{method:'POST',signal:ctl.signal,body:JSON.stringify(Object.assign({action:action,token:TOKEN},extra||{}))})
-    .then(function(r){clearTimeout(tmo); return r.json().catch(function(){throw new Error('Bad reply from server. Try again.')})},function(e){clearTimeout(tmo); throw new Error(e.name==='AbortError'?'Server took too long. Try again.':'Network error. Check internet.')})
+    .then(function(r){clearTimeout(tmo); return r.json()},function(e){clearTimeout(tmo); throw new Error(e.name==='AbortError'?'Server took too long. Try again.':'Network error. Check internet.')})
     .then(function(j){ if(!j.ok) throw new Error(j.error||'Error'); return j; });
 }
 function tm(ms){return ms?new Date(ms).toLocaleString([], {day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}):''}
@@ -132,7 +117,7 @@ function render(){
   list.forEach(function(m){
     var d=data[m], cap=CFG.cap[m];
     if(d){ n++;
-      h+='<button class="m" data-n="'+m+'"><div class="top"><span class="no">'+m+'</span><span class="cap">'+cap+' kg</span></div><div class="buyer">'+esc(d.buyer)+'</div><div class="col">'+esc(d.color)+'</div><div class="pos">'+esc(d.pos||'—')+'</div><div class="meta">Loaded '+esc(fmtT(d))+'</div></button>';
+      h+='<button class="m" data-n="'+m+'"><div class="top"><span class="no">'+m+'</span><span class="cap">'+cap+' kg</span></div><div class="buyer">'+esc(d.buyer)+'</div><div class="col">'+esc(d.color)+'</div><div class="pos">'+esc(d.pos||'—')+'</div><div class="meta">Loaded '+esc(d.loadTxt)+'</div>'+(d.next?'<div class="meta" style="font-weight:700">Next: '+esc(d.next)+'</div>':'')+'</button>';
     } else {
       h+='<button class="m idle" data-n="'+m+'"><div class="top"><span class="no">'+m+'</span><span class="cap">'+cap+' kg</span></div><div class="buyer">Idle</div><div class="meta">'+(ST.open?'Tap to update':'')+'</div></button>';
     }
@@ -145,7 +130,6 @@ $('t2').onclick=function(){tab=2;render()};
 $('t3').onclick=function(){tab=3;admSig='';render()};
 $('grid').addEventListener('click',function(e){
   var b=e.target.closest('.m'); if(!b) return;
-  if(Date.now()-closedAt<700) return; /* ignore the tap that just closed the form */
   if(!ST.open){alert('Positioning is closed. Wait for the admin to start.');return}
   openSheet(+b.dataset.n);
 });
@@ -174,78 +158,34 @@ function ac(input,dd,get){
   input.addEventListener('input',show);
   input.addEventListener('focus',function(){show(); setTimeout(show,400)});
   input.addEventListener('blur',function(){setTimeout(function(){dd.style.display='none'},180)});
-  /* keep focus on press, but pick the suggestion on click: hiding the list on press made the
-     finger-up tap land on the Clear/Cancel button underneath and reset the form */
-  dd.addEventListener('pointerdown',function(e){ e.preventDefault() });
-  dd.addEventListener('mousedown',function(e){ e.preventDefault() });
-  dd.addEventListener('click',function(e){
-    var t=e.target.closest('div'); if(!t) return;
-    e.preventDefault(); e.stopPropagation();
-    input.value=t.textContent;
-    setTimeout(function(){ dd.style.display='none' },0);
-  });
+  dd.addEventListener('pointerdown',function(e){var t=e.target.closest('div'); if(t){e.preventDefault(); input.value=t.textContent; dd.style.display='none'}});
 }
-/* ---------- extra suggestions added by admin (stored on this device) ---------- */
-function getSug(){ try{ var s=JSON.parse(localStorage.getItem('dft_sug')); return {buyers:(s&&s.buyers)||[],pos:(s&&s.pos)||[]} }catch(e){ return {buyers:[],pos:[]} } }
-function setSug(s){ try{ localStorage.setItem('dft_sug',JSON.stringify(s)) }catch(e){} }
-function merged(k){ var base=CFG?CFG[k]:[]; return base.concat((getSug()[k]||[]).filter(function(x){return base.indexOf(x)<0})) }
-ac($('buyer'),$('ddb'),function(){return merged('buyers')});
-ac($('pos'),$('ddp'),function(){return merged('pos')});
+ac($('buyer'),$('ddb'),function(){return CFG?CFG.buyers:[]});
+ac($('pos'),$('ddp'),function(){return CFG?CFG.pos:[]});
 function nowLocal(){var d=new Date(); d.setMinutes(d.getMinutes()-d.getTimezoneOffset()); return d.toISOString().slice(0,16)}
-function nowTime(){return nowLocal().slice(11,16)}
-/* time typed by operator -> full local date-time string the server expects (date is automatic) */
-function loadIso(t){
-  var now=new Date(), p=function(x){return String(x).padStart(2,'0')};
-  var hm=/^(\d\d):(\d\d)$/.exec(t||''); if(!hm) hm=/^(\d\d):(\d\d)$/.exec(nowTime());
-  var d=new Date(now.getFullYear(),now.getMonth(),now.getDate(),+hm[1],+hm[2]);
-  if(d-now>3600000) d.setDate(d.getDate()-1); /* time later than now = it was yesterday (night shift) */
-  return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+'T'+p(d.getHours())+':'+p(d.getMinutes());
-}
 function openSheet(m){
   cur=m; var d=data[m]||{};
   $('mt').textContent='Machine '+m+' · '+CFG.cap[m]+' kg';
-  $('buyer').value=d.buyer||''; $('color').value=d.color||''; $('load').value=(d.load&&/T\d\d:\d\d/.test(d.load)?d.load.slice(11,16):nowTime()); $('pos').value=d.pos||'';
+  $('buyer').value=d.buyer||''; $('color').value=d.color||''; $('load').value=d.load||nowLocal(); $('pos').value=d.pos||''; $('nextb').value=d.next||'';
   $('err').textContent=''; $('ov').classList.add('show');
 }
-var closedAt=0;
-function closeSheet(){
-  closedAt=Date.now(); cur=null;
-  var a=document.activeElement; if(a&&a.blur) try{a.blur()}catch(e){}
-  $('ov').classList.remove('show'); $('ov').classList.remove('kb');
-}
+function closeSheet(){$('ov').classList.remove('show'); cur=null}
 $('cancel').onclick=closeSheet;
-/* tapping outside closes the form; the tap is swallowed so it can't open the machine underneath */
-$('ov').addEventListener('pointerdown',function(e){ if(e.target===$('ov')){ e.preventDefault(); closeSheet() } });
-$('ov').addEventListener('click',function(e){ if(e.target===$('ov')){ e.preventDefault(); e.stopPropagation() } });
-/* pressing Save/Clear/Cancel must not take focus away from the field, otherwise the keyboard
-   collapses first, the buttons jump, and the tap is lost */
-Array.prototype.forEach.call(document.querySelectorAll('.row button'),function(b){
-  b.addEventListener('pointerdown',function(e){ e.preventDefault() });
-  b.addEventListener('mousedown',function(e){ e.preventDefault() });
-});
+$('ov').addEventListener('pointerdown',function(e){if(e.target===$('ov')) closeSheet()});
 function fin(j){busy=false; apply(j); closeSheet()}
 function fail(e){busy=false; $('err').textContent=e.message||'Failed. Try again.'}
 $('save').onclick=function(){
   if(busy) return;
   var buyer=$('buyer').value.trim(), pv=$('pos').value.trim();
-  var ok=merged('pos').filter(function(p){return p.toLowerCase()===pv.toLowerCase()})[0] || pv;
+  var ok=CFG.pos.filter(function(p){return p.toLowerCase()===pv.toLowerCase()})[0];
   if(!buyer){$('err').textContent='Enter the buyer name.';return}
-  if(!ok){$('err').textContent='Enter the position.';return}
+  if(!ok){$('err').textContent='Pick a position from the list.';return}
   busy=true; $('err').textContent='Saving…';
-  api('save',{mc:cur,buyer:buyer,color:$('color').value.trim(),load:loadIso($('load').value),pos:ok}).then(fin).catch(fail);
+  api('save',{mc:cur,buyer:buyer,color:$('color').value,load:$('load').value,pos:ok,next:$('nextb').value.trim()}).then(fin).catch(fail);
 };
-$('clear').onclick=function(){ if(busy) return; if(!confirm('Clear machine '+cur+'?')) return; busy=true; $('err').textContent='Clearing…'; api('clear',{mc:cur}).then(fin).catch(fail) };
+$('clear').onclick=function(){ if(busy) return; busy=true; $('err').textContent='Clearing…'; api('clear',{mc:cur}).then(fin).catch(fail) };
 
 /* ---------- admin ---------- */
-function sugHtml(){
-  var s=getSug(), h='<div style="margin-top:20px;border-top:1px solid var(--line);padding-top:6px"><h2 style="font-size:16px;margin:8px 0 0">Add suggestions</h2>';
-  [['buyers','Buyer'],['pos','Position']].forEach(function(p){
-    var k=p[0];
-    h+='<label>New '+p[1]+'</label><div style="display:flex;gap:8px"><input id="sg_'+k+'" autocomplete="off" placeholder="Type '+p[1].toLowerCase()+'…"><button class="btn pri" id="sgb_'+k+'" style="width:auto;margin:0;padding:0 18px">Add</button></div>';
-    if(s[k].length) h+='<div style="margin-top:8px;display:flex;flex-wrap:wrap;gap:6px">'+s[k].map(function(x){return '<span style="background:var(--idle);border:1px solid var(--line);border-radius:14px;padding:4px 6px 4px 10px;font-size:13px">'+esc(x)+' <button class="sgx" data-k="'+k+'" data-v="'+esc(x)+'" style="border:0;background:none;color:var(--bad);font-size:15px;font-weight:700">×</button></span>'}).join('')+'</div>';
-  });
-  return h+'<div style="font-size:11px;color:var(--mut);margin-top:8px">Saved on this device only.</div></div>';
-}
 function renderAdmin(){
   var h='';
   if(!TOKEN){
@@ -264,8 +204,7 @@ function renderAdmin(){
       ? '<button class="btn stop" id="astop">STOP positioning</button>'
       : '<label class="chk"><input type="checkbox" id="aclr" checked> Clear previous data before starting</label><button class="btn go" id="astart">START positioning</button>')
    +'<div class="err" id="aerr"></div>'
-   +sugHtml()
-   +'<button class="btn" id="alogout" style="margin-top:20px">Logout</button><div style="text-align:center;font-size:11px;color:var(--mut);margin-top:10px">page v17</div></div>';
+   +'<button class="btn" id="alogout" style="margin-top:20px">Logout</button><div style="text-align:center;font-size:11px;color:var(--mut);margin-top:10px">page v8</div></div>';
   $('adm').innerHTML=h;
   function guard(p){ $('aerr').textContent='Working…'; return p.then(function(j){apply(j)}).catch(function(e){
     if(/login required/i.test(e.message)){TOKEN='';sessionStorage.removeItem('dft_token');render()}
@@ -276,17 +215,6 @@ function renderAdmin(){
   if($('astart')) $('astart').onclick=function(){ $('astart').disabled=true; $('astart').textContent='Starting…'; guard(api('start',{clearOld:$('aclr').checked})) };
   if($('astop')) arm($('astop'),'STOP positioning',function(){guard(api('stop'))});
   $('aback').onclick=function(){tab=1;render()};
-  ['buyers','pos'].forEach(function(k){
-    $('sgb_'+k).onclick=function(){
-      var v=$('sg_'+k).value.trim(); if(!v) return;
-      var s=getSug(), all=merged(k);
-      if(!all.some(function(x){return x.toLowerCase()===v.toLowerCase()})){ s[k].push(v); setSug(s) }
-      renderAdmin();
-    };
-  });
-  Array.prototype.forEach.call(document.querySelectorAll('.sgx'),function(b){
-    b.onclick=function(){ var s=getSug(), k=b.dataset.k; s[k]=s[k].filter(function(x){return x!==b.dataset.v}); setSug(s); renderAdmin() };
-  });
   $('alogout').onclick=function(){ api('logout').catch(function(){}); TOKEN=''; sessionStorage.removeItem('dft_token'); render() };
 }
 
@@ -296,67 +224,33 @@ function stamp(){var n=new Date(),p=function(x){return String(x).padStart(2,'0')
           f:n.getFullYear()+p(n.getMonth()+1)+p(n.getDate())+'-'+p(n.getHours())+p(n.getMinutes())}}
 function allRows(){return CFG.u1.concat(CFG.u2)}
 function exportImage(){
-  /* A4 portrait page (210 x 297 mm) at 200 dpi = 1654 x 2339 px, table fills the page inside a margin */
-  var s=stamp(), rows=allRows(), PW=1654, PH=2339, M=70;
-  var W0=[70,90,190,150,130,190], T0=W0.reduce(function(a,b){return a+b},0);
-  var T=PW-2*M, W=W0.map(function(w){return Math.round(w*T/T0)});
-  W[5]+=T-W.reduce(function(a,b){return a+b},0);
-  var nRows=3+rows.length, RH=Math.min(80,Math.floor((PH-2*M)/nRows)), FS=Math.round(RH*0.42);
-  var cv=document.createElement('canvas'); cv.width=PW; cv.height=PH;
-  var c=cv.getContext('2d'); c.fillStyle='#fff'; c.fillRect(0,0,PW,PH); c.lineWidth=2; c.textAlign='center'; c.textBaseline='middle';
-  c.translate(M,M);
+  var s=stamp(), rows=allRows(), W=[70,90,170,130,110,170,150], T=W.reduce(function(a,b){return a+b},0), RH=30, H=RH*(3+rows.length), S=2;
+  var cv=document.createElement('canvas'); cv.width=T*S; cv.height=H*S;
+  var c=cv.getContext('2d'); c.scale(S,S); c.fillStyle='#fff'; c.fillRect(0,0,T,H); c.lineWidth=1; c.textAlign='center'; c.textBaseline='middle';
   function cell(x,y,w,t,b){
     if(b){c.fillStyle='#d9e2f3'; c.fillRect(x,y,w,RH)}
-    c.strokeStyle='#000'; c.strokeRect(x+.5,y+.5,w,RH); c.fillStyle='#000'; c.font=(b?'bold ':'')+FS+'px Arial,sans-serif';
-    var q=String(t==null?'':t); while(q.length>1&&c.measureText(q).width>w-16) q=q.slice(0,-1); c.fillText(q,x+w/2,y+RH/2+2);
+    c.strokeStyle='#000'; c.strokeRect(x+.5,y+.5,w,RH); c.fillStyle='#000'; c.font=(b?'bold ':'')+'13px Arial,sans-serif';
+    var q=String(t==null?'':t); while(q.length>1&&c.measureText(q).width>w-8) q=q.slice(0,-1); c.fillText(q,x+w/2,y+RH/2+1);
   }
   function line(y,a,b){var x=0; a.forEach(function(t,i){cell(x,y,W[i],t,b); x+=W[i]})}
   cell(0,0,T,'FLOOR POSITION',true);
   cell(0,RH,W[0]+W[1],'DATE',true); cell(W[0]+W[1],RH,W[2],s.d); cell(W[0]+W[1]+W[2],RH,W[3],'');
-  cell(W[0]+W[1]+W[2]+W[3],RH,W[4],'TIME',true); cell(T-W[5],RH,W[5],s.t);
-  line(RH*2,['MC','CAPACITY','BUYER','COLOR','LOAD TIME','POSITION'],true);
-  rows.forEach(function(n,i){var d=data[n]||{}; line(RH*(3+i),[n,CFG.cap[n],d.buyer||'',d.color||'',fmtT(d),d.pos||''],false)});
-  cv.toBlob(function(b){ if(!b){alert('Could not make the image.');return} saveBlob(b,'floor-position-'+s.f+'.png') },'image/png');
-}
-/* download a file; also show a fallback bar for phone/in-app browsers that ignore downloads */
-function saveBlob(blob,name){
-  var url=URL.createObjectURL(blob);
-  try{ var a=document.createElement('a'); a.href=url; a.download=name; document.body.appendChild(a); a.click(); a.remove() }catch(e){}
-  var old=$('dlbar'); if(old) old.remove();
-  var bar=document.createElement('div'); bar.id='dlbar';
-  bar.style.cssText='position:fixed;left:10px;right:10px;bottom:10px;z-index:60;background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:12px;padding:10px 12px;box-shadow:0 6px 18px rgba(0,0,0,.3);font-size:14px;display:flex;gap:8px;align-items:center';
-  bar.innerHTML='<span style="flex:1">'+esc(name)+'<br><span style="font-size:12px;color:var(--mut)">Not downloaded? Tap Share / Open.</span></span><button id="dlgo" style="padding:9px 14px;border-radius:10px;border:1px solid var(--acc);background:var(--acc);color:#fff;font-weight:700">Share / Open</button><button id="dlx" style="padding:9px 12px;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--ink);font-weight:700">×</button>';
-  document.body.appendChild(bar);
-  $('dlx').onclick=function(){bar.remove()};
-  $('dlgo').onclick=function(){
-    try{
-      var f=new File([blob],name,{type:blob.type});
-      if(navigator.canShare&&navigator.canShare({files:[f]})){ navigator.share({files:[f]}).catch(function(){}); return }
-    }catch(e){}
-    window.open(url,'_blank');
-  };
-  setTimeout(function(){ if(bar.parentNode) bar.remove(); URL.revokeObjectURL(url) },60000);
+  cell(W[0]+W[1]+W[2]+W[3],RH,W[4],'TIME',true); cell(W[0]+W[1]+W[2]+W[3]+W[4],RH,W[5],s.t); cell(T-W[6],RH,W[6],'');
+  line(RH*2,['MC','CAPACITY','BUYER','COLOR','LOAD TIME','POSITION','NEXT READY BATCH'],true);
+  rows.forEach(function(n,i){var d=data[n]||{}; line(RH*(3+i),[n,CFG.cap[n],d.buyer||'',d.color||'',d.loadTxt||'',d.pos||'',d.next||''],false)});
+  cv.toBlob(function(b){var a=document.createElement('a'); a.href=URL.createObjectURL(b); a.download='floor-position-'+s.f+'.png'; document.body.appendChild(a); a.click(); a.remove()},'image/png');
 }
 function exportExcel(){
-  var s=stamp(), r=[['FLOOR POSITION'],['DATE','',s.d,'','TIME',s.t],['MC','CAPACITY','BUYER','COLOR','LOAD TIME','POSITION']];
-  allRows().forEach(function(n){var d=data[n]||{}; r.push([n,CFG.cap[n],d.buyer||'',d.color||'',fmtT(d),d.pos||''])});
-  if(!window.XLSX){ /* library blocked/offline: fall back to a CSV that Excel opens */
-    var csv='﻿'+r.map(function(row){return row.map(function(v){return '"'+String(v==null?'':v).replace(/"/g,'""')+'"'}).join(',')}).join('\r\n');
-    saveBlob(new Blob([csv],{type:'text/csv'}),'floor-position-'+s.f+'.csv'); return;
-  }
-  var ws=XLSX.utils.aoa_to_sheet(r); ws['!merges']=[{s:{r:0,c:0},e:{r:0,c:5}},{s:{r:1,c:0},e:{r:1,c:1}}];
-  ws['!cols']=[{wch:7},{wch:10},{wch:22},{wch:18},{wch:16},{wch:24}];
-  var wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Floor Position');
-  var out=XLSX.write(wb,{bookType:'xlsx',type:'array'});
-  saveBlob(new Blob([out],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}),'floor-position-'+s.f+'.xlsx');
+  if(!window.XLSX){alert('Excel library did not load.');return}
+  var s=stamp(), r=[['FLOOR POSITION'],['DATE','',s.d,'','TIME',s.t],['MC','CAPACITY','BUYER','COLOR','LOAD TIME','POSITION','NEXT READY BATCH']];
+  allRows().forEach(function(n){var d=data[n]||{}; r.push([n,CFG.cap[n],d.buyer||'',d.color||'',d.loadTxt||'',d.pos||'',d.next||''])});
+  var ws=XLSX.utils.aoa_to_sheet(r); ws['!merges']=[{s:{r:0,c:0},e:{r:0,c:6}},{s:{r:1,c:0},e:{r:1,c:1}}];
+  ws['!cols']=[{wch:7},{wch:10},{wch:22},{wch:18},{wch:16},{wch:24},{wch:22}];
+  var wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Floor Position'); XLSX.writeFile(wb,'floor-position-'+s.f+'.xlsx');
 }
 
-function runExport(fn){
-  if(!CFG){ alert('Data has not loaded from the server yet. Check the red bar at the top, wait a few seconds, then try again.'); return }
-  try{ fn() }catch(e){ alert('Export failed: '+(e&&e.message||e)) }
-}
-$('expimg').onclick=function(){ runExport(exportImage) };
-$('expxls').onclick=function(){ runExport(exportExcel) };
+$('expimg').onclick=function(){ if(CFG) exportImage() };
+$('expxls').onclick=function(){ if(CFG) exportExcel() };
 
 $('cfg').onclick=function(){ $('cfgurl').value=API_URL; $('cfgerr').textContent=''; $('cfgov').style.display='flex' };
 $('cfgx').onclick=function(){ $('cfgov').style.display='none' };
@@ -368,28 +262,9 @@ $('cfgsave').onclick=function(){
 };
 $('cfgreset').onclick=function(){ try{ localStorage.removeItem('dft_api') }catch(e){} location.reload() };
 
-/* ---------- auto-update: reload when a newer page version is uploaded ---------- */
-var PAGE_VER='v17';
-if('serviceWorker' in navigator && location.protocol==='https:'){ window.addEventListener('load',function(){ navigator.serviceWorker.register('sw.js').catch(function(){}) }) }
-function checkUpdate(){
-  if(cur!==null||busy||location.protocol==='file:') return;
-  fetch(location.href.split('#')[0].split('?')[0]+'?_='+Date.now(),{cache:'no-store'})
-    .then(function(r){return r.text()})
-    .then(function(t){ var m=t.match(/var PAGE_VER='([^']+)'/); if(m&&m[1]!==PAGE_VER) location.reload(); })
-    .catch(function(){});
-}
-setInterval(checkUpdate,60000);
-document.addEventListener('visibilitychange',function(){ if(!document.hidden) checkUpdate() });
-
 /* ---------- start ---------- */
-function boot(){
-  api('boot').then(function(j){CFG=j.cfg; apply(j)}).catch(function(e){
-    $('banner').className='closed'; $('banner').textContent='Cannot reach server: '+e.message+' (retrying… tap the gear to check the script link)';
-    setTimeout(boot,8000);
-  });
-}
-boot();
-setInterval(function(){ if(!CFG||cur!==null||busy||document.hidden) return; api('data').then(apply).catch(function(){}) },15000);
+api('boot').then(function(j){CFG=j.cfg; apply(j)}).catch(function(e){$('banner').className='closed'; $('banner').textContent='Cannot reach server: '+e.message+' (tap the gear to check the script link)'});
+setInterval(function(){ if(!CFG||cur!==null||busy) return; api('data').then(apply).catch(function(){}) },15000);
 </script>
 </body>
 </html>
