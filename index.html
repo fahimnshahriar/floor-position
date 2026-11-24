@@ -73,11 +73,13 @@ input{width:100%;padding:12px;font-size:16px;border:1px solid var(--line);border
   <h2 id="mt"></h2>
   <label>Buyer name</label>
   <div class="w"><input id="buyer" autocomplete="off" placeholder="Start typing…"><div class="dd" id="ddb"></div></div>
-  <label>Color</label><input id="color" autocomplete="off">
+  <label>Color</label>
+  <div class="w"><input id="color" autocomplete="off"><div class="dd" id="ddc"></div></div>
   <label>Load time</label><input id="load" type="time">
   <label>Position</label>
   <div class="w"><input id="pos" autocomplete="off" placeholder="Start typing… e.g. scou"><div class="dd" id="ddp"></div></div>
-  <label>Next ready batch</label><input id="nextb" autocomplete="off" placeholder="Batch / lot no.">
+  <label>Next ready batch</label>
+  <div class="w"><input id="nextb" autocomplete="off" placeholder="Batch / lot no."><div class="dd" id="ddn"></div></div>
   <div class="err" id="err"></div>
   <div class="row"><button id="cancel">Cancel</button><button class="del" id="clear">Clear</button><button class="save" id="save">Save</button></div>
 </div></div>
@@ -189,9 +191,16 @@ function ac(input,dd,get){
 /* ---------- extra suggestions added by admin (stored on this device) ---------- */
 function getSug(){ try{ var s=JSON.parse(localStorage.getItem('dft_sug')); return {buyers:(s&&s.buyers)||[],pos:(s&&s.pos)||[]} }catch(e){ return {buyers:[],pos:[]} } }
 function setSug(s){ try{ localStorage.setItem('dft_sug',JSON.stringify(s)) }catch(e){} }
-function merged(k){ var base=CFG?CFG[k]:[]; return base.concat((getSug()[k]||[]).filter(function(x){return base.indexOf(x)<0})) }
+/* values already used on the board are suggested too, so anything new that one operator types helps the others */
+function used(f){ var o=[]; Object.keys(data).forEach(function(m){ var v=data[m]&&data[m][f]; if(v&&o.indexOf(v)<0) o.push(v) }); return o }
+function merged(k){
+  var base=CFG?CFG[k]:[], extra=(getSug()[k]||[]).concat(used(k==='buyers'?'buyer':'pos'));
+  return base.concat(extra.filter(function(x,i){return base.indexOf(x)<0&&extra.indexOf(x)===i}));
+}
 ac($('buyer'),$('ddb'),function(){return merged('buyers')});
 ac($('pos'),$('ddp'),function(){return merged('pos')});
+ac($('color'),$('ddc'),function(){return used('color')});
+ac($('nextb'),$('ddn'),function(){return used('next')});
 function nowLocal(){var d=new Date(); d.setMinutes(d.getMinutes()-d.getTimezoneOffset()); return d.toISOString().slice(0,16)}
 function nowTime(){return nowLocal().slice(11,16)}
 /* time typed by operator -> full local date-time string the server expects (date is automatic) */
@@ -266,7 +275,7 @@ function renderAdmin(){
       : '<label class="chk"><input type="checkbox" id="aclr" checked> Clear previous data before starting</label><button class="btn go" id="astart">START positioning</button>')
    +'<div class="err" id="aerr"></div>'
    +sugHtml()
-   +'<button class="btn" id="alogout" style="margin-top:20px">Logout</button><div style="text-align:center;font-size:11px;color:var(--mut);margin-top:10px">page v18</div></div>';
+   +'<button class="btn" id="alogout" style="margin-top:20px">Logout</button><div style="text-align:center;font-size:11px;color:var(--mut);margin-top:10px">page v19</div></div>';
   $('adm').innerHTML=h;
   function guard(p){ $('aerr').textContent='Working…'; return p.then(function(j){apply(j)}).catch(function(e){
     if(/login required/i.test(e.message)){TOKEN='';sessionStorage.removeItem('dft_token');render()}
@@ -369,7 +378,7 @@ $('cfgsave').onclick=function(){
 $('cfgreset').onclick=function(){ try{ localStorage.removeItem('dft_api') }catch(e){} location.reload() };
 
 /* ---------- auto-update: reload when a newer page version is uploaded ---------- */
-var PAGE_VER='v18';
+var PAGE_VER='v19';
 if('serviceWorker' in navigator && location.protocol==='https:'){ window.addEventListener('load',function(){ navigator.serviceWorker.register('sw.js').catch(function(){}) }) }
 function checkUpdate(){
   if(cur!==null||busy||location.protocol==='file:') return;
