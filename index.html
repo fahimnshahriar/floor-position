@@ -73,13 +73,10 @@ input{width:100%;padding:12px;font-size:16px;border:1px solid var(--line);border
   <h2 id="mt"></h2>
   <label>Buyer name</label>
   <div class="w"><input id="buyer" autocomplete="off" placeholder="Start typing…"><div class="dd" id="ddb"></div></div>
-  <label>Color</label>
-  <div class="w"><input id="color" autocomplete="off"><div class="dd" id="ddc"></div></div>
+  <label>Color</label><input id="color" autocomplete="off">
   <label>Load time</label><input id="load" type="time">
   <label>Position</label>
   <div class="w"><input id="pos" autocomplete="off" placeholder="Start typing… e.g. scou"><div class="dd" id="ddp"></div></div>
-  <label>Next ready batch</label>
-  <div class="w"><input id="nextb" autocomplete="off" placeholder="Batch / lot no."><div class="dd" id="ddn"></div></div>
   <div class="err" id="err"></div>
   <div class="row"><button id="cancel">Cancel</button><button class="del" id="clear">Clear</button><button class="save" id="save">Save</button></div>
 </div></div>
@@ -135,7 +132,7 @@ function render(){
   list.forEach(function(m){
     var d=data[m], cap=CFG.cap[m];
     if(d){ n++;
-      h+='<button class="m" data-n="'+m+'"><div class="top"><span class="no">'+m+'</span><span class="cap">'+cap+' kg</span></div><div class="buyer">'+esc(d.buyer)+'</div><div class="col">'+esc(d.color)+'</div><div class="pos">'+esc(d.pos||'—')+'</div><div class="meta">Loaded '+esc(fmtT(d))+'</div>'+(d.next?'<div class="meta" style="font-weight:700">Next: '+esc(d.next)+'</div>':'')+'</button>';
+      h+='<button class="m" data-n="'+m+'"><div class="top"><span class="no">'+m+'</span><span class="cap">'+cap+' kg</span></div><div class="buyer">'+esc(d.buyer)+'</div><div class="col">'+esc(d.color)+'</div><div class="pos">'+esc(d.pos||'—')+'</div><div class="meta">Loaded '+esc(fmtT(d))+'</div></button>';
     } else {
       h+='<button class="m idle" data-n="'+m+'"><div class="top"><span class="no">'+m+'</span><span class="cap">'+cap+' kg</span></div><div class="buyer">Idle</div><div class="meta">'+(ST.open?'Tap to update':'')+'</div></button>';
     }
@@ -191,16 +188,9 @@ function ac(input,dd,get){
 /* ---------- extra suggestions added by admin (stored on this device) ---------- */
 function getSug(){ try{ var s=JSON.parse(localStorage.getItem('dft_sug')); return {buyers:(s&&s.buyers)||[],pos:(s&&s.pos)||[]} }catch(e){ return {buyers:[],pos:[]} } }
 function setSug(s){ try{ localStorage.setItem('dft_sug',JSON.stringify(s)) }catch(e){} }
-/* values already used on the board are suggested too, so anything new that one operator types helps the others */
-function used(f){ var o=[]; Object.keys(data).forEach(function(m){ var v=data[m]&&data[m][f]; if(v&&o.indexOf(v)<0) o.push(v) }); return o }
-function merged(k){
-  var base=CFG?CFG[k]:[], extra=(getSug()[k]||[]).concat(used(k==='buyers'?'buyer':'pos'));
-  return base.concat(extra.filter(function(x,i){return base.indexOf(x)<0&&extra.indexOf(x)===i}));
-}
+function merged(k){ var base=CFG?CFG[k]:[]; return base.concat((getSug()[k]||[]).filter(function(x){return base.indexOf(x)<0})) }
 ac($('buyer'),$('ddb'),function(){return merged('buyers')});
 ac($('pos'),$('ddp'),function(){return merged('pos')});
-ac($('color'),$('ddc'),function(){return used('color')});
-ac($('nextb'),$('ddn'),function(){return used('next')});
 function nowLocal(){var d=new Date(); d.setMinutes(d.getMinutes()-d.getTimezoneOffset()); return d.toISOString().slice(0,16)}
 function nowTime(){return nowLocal().slice(11,16)}
 /* time typed by operator -> full local date-time string the server expects (date is automatic) */
@@ -214,7 +204,7 @@ function loadIso(t){
 function openSheet(m){
   cur=m; var d=data[m]||{};
   $('mt').textContent='Machine '+m+' · '+CFG.cap[m]+' kg';
-  $('buyer').value=d.buyer||''; $('color').value=d.color||''; $('load').value=(d.load&&/T\d\d:\d\d/.test(d.load)?d.load.slice(11,16):nowTime()); $('pos').value=d.pos||''; $('nextb').value=d.next||'';
+  $('buyer').value=d.buyer||''; $('color').value=d.color||''; $('load').value=(d.load&&/T\d\d:\d\d/.test(d.load)?d.load.slice(11,16):nowTime()); $('pos').value=d.pos||'';
   $('err').textContent=''; $('ov').classList.add('show');
 }
 var closedAt=0;
@@ -242,7 +232,7 @@ $('save').onclick=function(){
   if(!buyer){$('err').textContent='Enter the buyer name.';return}
   if(!ok){$('err').textContent='Enter the position.';return}
   busy=true; $('err').textContent='Saving…';
-  api('save',{mc:cur,buyer:buyer,color:$('color').value.trim(),load:loadIso($('load').value),pos:ok,next:$('nextb').value.trim()}).then(fin).catch(fail);
+  api('save',{mc:cur,buyer:buyer,color:$('color').value.trim(),load:loadIso($('load').value),pos:ok}).then(fin).catch(fail);
 };
 $('clear').onclick=function(){ if(busy) return; if(!confirm('Clear machine '+cur+'?')) return; busy=true; $('err').textContent='Clearing…'; api('clear',{mc:cur}).then(fin).catch(fail) };
 
@@ -275,7 +265,7 @@ function renderAdmin(){
       : '<label class="chk"><input type="checkbox" id="aclr" checked> Clear previous data before starting</label><button class="btn go" id="astart">START positioning</button>')
    +'<div class="err" id="aerr"></div>'
    +sugHtml()
-   +'<button class="btn" id="alogout" style="margin-top:20px">Logout</button><div style="text-align:center;font-size:11px;color:var(--mut);margin-top:10px">page v19</div></div>';
+   +'<button class="btn" id="alogout" style="margin-top:20px">Logout</button><div style="text-align:center;font-size:11px;color:var(--mut);margin-top:10px">page v17</div></div>';
   $('adm').innerHTML=h;
   function guard(p){ $('aerr').textContent='Working…'; return p.then(function(j){apply(j)}).catch(function(e){
     if(/login required/i.test(e.message)){TOKEN='';sessionStorage.removeItem('dft_token');render()}
@@ -306,26 +296,27 @@ function stamp(){var n=new Date(),p=function(x){return String(x).padStart(2,'0')
           f:n.getFullYear()+p(n.getMonth()+1)+p(n.getDate())+'-'+p(n.getHours())+p(n.getMinutes())}}
 function allRows(){return CFG.u1.concat(CFG.u2)}
 function exportImage(){
-  /* A4 portrait, 2480 x 3508 px (300 dpi); MC / CAPACITY / LOAD TIME columns narrow */
-  var s=stamp(), rows=allRows(), W=[40,60,150,130,80,150,136], T=W.reduce(function(a,b){return a+b},0),
-      RH=32, M=24, PW=794, PH=1123, S=2480/PW;
-  var cv=document.createElement('canvas'); cv.width=2480; cv.height=Math.round(PH*S);
-  var c=cv.getContext('2d'); c.scale(S,S); c.fillStyle='#fff'; c.fillRect(0,0,PW,PH);
-  c.translate(M,M); c.lineWidth=1; c.textAlign='center'; c.textBaseline='middle';
-  function cell(x,y,w,t,b,fs){
+  /* A4 portrait page (210 x 297 mm) at 200 dpi = 1654 x 2339 px, table fills the page inside a margin */
+  var s=stamp(), rows=allRows(), PW=1654, PH=2339, M=70;
+  var W0=[70,90,190,150,130,190], T0=W0.reduce(function(a,b){return a+b},0);
+  var T=PW-2*M, W=W0.map(function(w){return Math.round(w*T/T0)});
+  W[5]+=T-W.reduce(function(a,b){return a+b},0);
+  var nRows=3+rows.length, RH=Math.min(80,Math.floor((PH-2*M)/nRows)), FS=Math.round(RH*0.42);
+  var cv=document.createElement('canvas'); cv.width=PW; cv.height=PH;
+  var c=cv.getContext('2d'); c.fillStyle='#fff'; c.fillRect(0,0,PW,PH); c.lineWidth=2; c.textAlign='center'; c.textBaseline='middle';
+  c.translate(M,M);
+  function cell(x,y,w,t,b){
     if(b){c.fillStyle='#d9e2f3'; c.fillRect(x,y,w,RH)}
-    c.strokeStyle='#000'; c.strokeRect(x+.5,y+.5,w,RH); c.fillStyle='#000';
-    c.font=(b?'bold ':'')+(fs||(b?10.5:13))+'px Arial,sans-serif';
-    var q=String(t==null?'':t); while(q.length>1&&c.measureText(q).width>w-6) q=q.slice(0,-1);
-    c.fillText(q,x+w/2,y+RH/2+1);
+    c.strokeStyle='#000'; c.strokeRect(x+.5,y+.5,w,RH); c.fillStyle='#000'; c.font=(b?'bold ':'')+FS+'px Arial,sans-serif';
+    var q=String(t==null?'':t); while(q.length>1&&c.measureText(q).width>w-16) q=q.slice(0,-1); c.fillText(q,x+w/2,y+RH/2+2);
   }
   function line(y,a,b){var x=0; a.forEach(function(t,i){cell(x,y,W[i],t,b); x+=W[i]})}
-  cell(0,0,T,'FLOOR POSITION',true,16);
-  cell(0,RH,W[0]+W[1],'DATE',true,12); cell(W[0]+W[1],RH,W[2],s.d,false,13); cell(W[0]+W[1]+W[2],RH,W[3],'');
-  cell(W[0]+W[1]+W[2]+W[3],RH,W[4],'TIME',true,12); cell(W[0]+W[1]+W[2]+W[3]+W[4],RH,W[5],s.t,false,13); cell(T-W[6],RH,W[6],'');
-  line(RH*2,['MC','CAPACITY','BUYER','COLOR','LOAD TIME','POSITION','NEXT READY BATCH'],true);
-  rows.forEach(function(n,i){var d=data[n]||{}; line(RH*(3+i),[n,CFG.cap[n],d.buyer||'',d.color||'',fmtT(d),d.pos||'',d.next||''],false)});
-  cv.toBlob(function(b){ if(!b){alert('Could not make the image.');return} saveBlob(b,'floor-position-A4-'+s.f+'.png') },'image/png');
+  cell(0,0,T,'FLOOR POSITION',true);
+  cell(0,RH,W[0]+W[1],'DATE',true); cell(W[0]+W[1],RH,W[2],s.d); cell(W[0]+W[1]+W[2],RH,W[3],'');
+  cell(W[0]+W[1]+W[2]+W[3],RH,W[4],'TIME',true); cell(T-W[5],RH,W[5],s.t);
+  line(RH*2,['MC','CAPACITY','BUYER','COLOR','LOAD TIME','POSITION'],true);
+  rows.forEach(function(n,i){var d=data[n]||{}; line(RH*(3+i),[n,CFG.cap[n],d.buyer||'',d.color||'',fmtT(d),d.pos||''],false)});
+  cv.toBlob(function(b){ if(!b){alert('Could not make the image.');return} saveBlob(b,'floor-position-'+s.f+'.png') },'image/png');
 }
 /* download a file; also show a fallback bar for phone/in-app browsers that ignore downloads */
 function saveBlob(blob,name){
@@ -347,14 +338,14 @@ function saveBlob(blob,name){
   setTimeout(function(){ if(bar.parentNode) bar.remove(); URL.revokeObjectURL(url) },60000);
 }
 function exportExcel(){
-  var s=stamp(), r=[['FLOOR POSITION'],['DATE','',s.d,'','TIME',s.t],['MC','CAPACITY','BUYER','COLOR','LOAD TIME','POSITION','NEXT READY BATCH']];
-  allRows().forEach(function(n){var d=data[n]||{}; r.push([n,CFG.cap[n],d.buyer||'',d.color||'',fmtT(d),d.pos||'',d.next||''])});
+  var s=stamp(), r=[['FLOOR POSITION'],['DATE','',s.d,'','TIME',s.t],['MC','CAPACITY','BUYER','COLOR','LOAD TIME','POSITION']];
+  allRows().forEach(function(n){var d=data[n]||{}; r.push([n,CFG.cap[n],d.buyer||'',d.color||'',fmtT(d),d.pos||''])});
   if(!window.XLSX){ /* library blocked/offline: fall back to a CSV that Excel opens */
     var csv='﻿'+r.map(function(row){return row.map(function(v){return '"'+String(v==null?'':v).replace(/"/g,'""')+'"'}).join(',')}).join('\r\n');
     saveBlob(new Blob([csv],{type:'text/csv'}),'floor-position-'+s.f+'.csv'); return;
   }
-  var ws=XLSX.utils.aoa_to_sheet(r); ws['!merges']=[{s:{r:0,c:0},e:{r:0,c:6}},{s:{r:1,c:0},e:{r:1,c:1}}];
-  ws['!cols']=[{wch:5},{wch:9},{wch:20},{wch:16},{wch:11},{wch:22},{wch:20}];
+  var ws=XLSX.utils.aoa_to_sheet(r); ws['!merges']=[{s:{r:0,c:0},e:{r:0,c:5}},{s:{r:1,c:0},e:{r:1,c:1}}];
+  ws['!cols']=[{wch:7},{wch:10},{wch:22},{wch:18},{wch:16},{wch:24}];
   var wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,'Floor Position');
   var out=XLSX.write(wb,{bookType:'xlsx',type:'array'});
   saveBlob(new Blob([out],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'}),'floor-position-'+s.f+'.xlsx');
@@ -378,7 +369,7 @@ $('cfgsave').onclick=function(){
 $('cfgreset').onclick=function(){ try{ localStorage.removeItem('dft_api') }catch(e){} location.reload() };
 
 /* ---------- auto-update: reload when a newer page version is uploaded ---------- */
-var PAGE_VER='v19';
+var PAGE_VER='v17';
 if('serviceWorker' in navigator && location.protocol==='https:'){ window.addEventListener('load',function(){ navigator.serviceWorker.register('sw.js').catch(function(){}) }) }
 function checkUpdate(){
   if(cur!==null||busy||location.protocol==='file:') return;
